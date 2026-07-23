@@ -1,0 +1,36 @@
+name: nightly
+# Nightly maintenance (~4:47 AM ET): recompute age-dependent features for the whole
+# active set, full TF-IDF re-cluster, and (Sundays) the blind QA sample.
+
+on:
+  schedule:
+    - cron: '47 8 * * *'   # 08:47 UTC = 4:47 AM ET during DST
+  workflow_dispatch:
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r pipeline/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code   # QA sample re-classification (Sundays)
+      - name: Recompute features, recluster, QA sample
+        run: python -m pipeline.nightly
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_PAT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GHA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

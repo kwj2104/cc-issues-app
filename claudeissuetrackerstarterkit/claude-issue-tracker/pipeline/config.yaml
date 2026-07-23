@@ -1,0 +1,67 @@
+# Pipeline configuration — single source of truth for tunables.
+# Retrieval-layer settings mirror docs/retrieval-spec.md §3 (keep them in sync).
+
+repo: anthropics/claude-code
+
+# --- deterministic retrieval layer (ported from Stage 1; see docs/retrieval-spec.md) ---
+weights:            # retrieval_score components
+  reactions: 3.0
+  comments: 1.0
+  velocity: 2.0
+  severity: 2.0
+  demand: 1.0
+  cluster: 2.0
+severity:
+  cap: 5.0
+  label_weights:
+    data-loss: 3.0
+    area:security: 2.0
+    regression: 2.0
+    high-priority: 2.0
+    perf:reliability: 1.5
+    med-priority: 1.0
+    "has repro": 0.5
+  regex_bonus: 1.0
+  regex_bank: "crash|hang|freeze|data.?loss|corrupt|segfault|CVE-\\d{4}|after updat"
+demand:
+  labels: [enhancement, "feature request", feature]
+  min_reactions: 5
+clustering:
+  similarity_threshold: 0.6
+  ngram_range: [1, 2]
+  min_df: 2
+  max_df: 0.5
+  body_lead_chars: 1500
+eligibility:
+  exclude_labels: [duplicate, invalid, stale, autoclose, question]
+  stale_rescue_min_reactions: 10
+  exclude_lock_reasons: [spam, resolved]
+  junk_filter: {max_clean_body_chars: 40, max_reactions: 0, max_comments: 0, min_age_days: 7}
+
+# --- LLM classification layer ---
+classifier:
+  model: sonnet                 # headless `claude -p --model sonnet`
+  rubric: pipeline/prompts/rubric_v2.md
+  verify: pipeline/prompts/verify_v1.md
+  output_schema: pipeline/prompts/output_schema.json
+  rubric_version: v2.0
+  batch_size: 20                # issues per classify call
+  verify_threshold: 70          # first-pass H or score ≥ this → adversarial second pass
+  catchup_per_run: 150          # backlog classification cap per scheduled run
+  reclassify_on: [state_reopened, title_changed, label_severity_changed]
+  api_fallback: false           # true → use ANTHROPIC_API_KEY instead of subscription (escape hatch)
+
+# --- blended ranking ---
+blend:                          # final_rank_score = Σ w · norm(component)
+  llm_priority: 0.45
+  rate_score: 0.25
+  severity: 0.20
+  cluster_mass: 0.10
+
+# --- ops ---
+qa:
+  weekly_sample: 20             # Sunday nightly: blind re-classification sample
+  area_agreement_floor: 0.85
+  high_share_band: [0.15, 0.25]
+digest:
+  new_high_batch_ribbon: true   # closed verified-High get a resolved ribbon in New & Notable

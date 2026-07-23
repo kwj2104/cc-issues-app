@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "classification_batch",
+  "type": "object",
+  "required": ["classifications"],
+  "additionalProperties": false,
+  "properties": {
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "type", "area", "tags", "theme", "priority", "priority_score", "summary", "rationale", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "number": { "type": "integer" },
+          "type": { "enum": ["Bug", "Feature Request", "Question/Support", "Docs", "Other/Meta"] },
+          "area": { "enum": ["installation-packaging", "auth-account", "billing-limits-cost", "session-context", "model-behavior", "safety-filtering", "tui-ux", "tools-permissions", "mcp", "ide-desktop", "platform-env", "extensibility-automation", "performance-stability", "providers-api", "docs", "other-products", "other-unclear"] },
+          "tags": { "type": "array", "items": { "enum": ["regression", "crash", "data-loss", "security", "cost-impact", "safety-false-positive", "has-workaround", "needs-repro", "high-engagement", "non-cli", "i18n"] } },
+          "theme": { "enum": ["work-session-integrity", "consent-enforcement", "safety-filter-precision", "change-velocity-rollout", "surface-sprawl", "money-correctness", "delegation-frontier", "none"] },
+          "priority": { "enum": ["H", "M", "L"] },
+          "priority_score": { "type": "number", "minimum": 0, "maximum": 100 },
+          "summary": { "type": "string", "maxLength": 320 },
+          "rationale": { "type": "string", "maxLength": 240 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "duplicate_of": { "type": ["integer", "null"] }
+        }
+      }
+    }
+  }
+}

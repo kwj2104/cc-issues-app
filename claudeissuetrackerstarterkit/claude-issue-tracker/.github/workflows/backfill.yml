@@ -1,0 +1,47 @@
+name: backfill
+# One-time / manual jobs, run from the Actions tab in order:
+#   1. census       — full crawl of the open backlog (~12k issues, ~120 API calls, minutes)
+#   2. seed-import  — import the adjudicated 1,000-row review log from data/seed/
+#   3. catchup      — LLM-classify the pending eligible set, ≤150 issues per invocation
+#                     (re-run until the queue is empty; scheduled sync runs also drain it)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Backfill stage'
+        required: true
+        type: choice
+        options: [census, seed-import, catchup]
+      limit:
+        description: 'Max issues to classify this run (catchup only)'
+        required: false
+        default: '150'
+
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r pipeline/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Run backfill stage
+        run: python -m pipeline.backfill --mode "${{ inputs.mode }}" --limit "${{ inputs.limit }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_PAT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GHA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
