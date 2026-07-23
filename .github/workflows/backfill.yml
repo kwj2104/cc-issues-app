@@ -41,7 +41,6 @@ jobs:
         run: python -m pipeline.backfill --mode "${{ inputs.mode }}" --limit "${{ inputs.limit }}"
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_PAT }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GHA_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

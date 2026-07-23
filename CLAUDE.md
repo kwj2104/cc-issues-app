@@ -23,7 +23,10 @@ one API route gated by `EDIT_SECRET`.
 - **Pipeline**: Python 3.12, `psycopg`, pandas/scikit-learn for features/clustering. Modules:
   `pipeline/sync.py`, `pipeline/nightly.py`, `pipeline/backfill.py`, plus `db.py`, `ingest.py`,
   `features.py`, `cluster.py`, `classify.py` as internals. All tunables live in
-  `pipeline/config.yaml` — never hardcode weights/thresholds.
+  `pipeline/config.yaml` — never hardcode weights/thresholds. DB access is via `psycopg`
+  using `DATABASE_URL` only (Supabase Session pooler, port 5432); the
+  `SUPABASE_SERVICE_ROLE_KEY` is a PostgREST JWT for the web triage route, **not** the
+  pipeline. (Switching to the Transaction pooler on 6543 requires `prepare_threshold=None`.)
 - **Classifier**: shell out to `claude -p --model sonnet --output-format json --json-schema
   pipeline/prompts/output_schema.json` with the rubric as system prompt (`--append-system-prompt-file`
   or prepended). Auth: `CLAUDE_CODE_OAUTH_TOKEN` env (CI) or logged-in session (local). Batch

@@ -19,7 +19,9 @@ git add -A && git commit -m "scaffold: schema, workflows, prompts, specs, design
 
 **2. Supabase** (you have the account): create a project (any region) →
 SQL Editor → paste all of `db/schema.sql` → Run. Then Project Settings → API: copy the
-**Project URL**, **anon** key, and **service_role** key.
+**Project URL**, **anon** key, and **service_role** key. Also Project Settings → Database →
+**Connection string → URI** (Session pooler): this is `DATABASE_URL`, the direct Postgres DSN
+the pipeline uses via `psycopg` (the service_role key is a PostgREST JWT, not a DB password).
 
 **3. GitHub PAT** for reading the claude-code repo: github.com → Settings → Developer settings →
 Fine-grained tokens → new token, Public repositories (read-only), 90-day expiry is fine.
@@ -37,6 +39,7 @@ gh secret set SYNC_GITHUB_PAT             # paste the PAT
 gh secret set CLAUDE_CODE_OAUTH_TOKEN     # paste the setup-token output
 gh secret set SUPABASE_URL                # https://YOURPROJECT.supabase.co
 gh secret set SUPABASE_SERVICE_ROLE_KEY   # the service_role key
+gh secret set DATABASE_URL                # Postgres DSN (Database → Connection string → URI)
 ```
 
 **6. Seed data:** drop `claude_code_issue_log.csv` (from the July review workbook) into
