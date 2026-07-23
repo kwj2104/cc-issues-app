@@ -124,11 +124,13 @@ insert into sync_state(key,value) values ('schema_version','1.2'), ('rubric_vers
 create or replace view v_master with (security_invoker = on) as
 select
   i.number, i.title, i.state, i.state_reason, i.labels, i.created_at, i.updated_at, i.closed_at,
-  i.comments, i.reactions_total, i.maintainer_authored, i.html_url,
+  i.comments, i.reactions_total, i.reactions_plus1, i.maintainer_authored, i.html_url,
   f.age_days, f.rate_score, f.retrieval_score, f.cluster_id, f.cluster_size, f.is_junk, f.eligible,
+  f.f_severity, f.f_velocity, f.f_reactions, f.f_comments, f.f_demand,
   a.type, a.area, a.tags, a.theme, a.priority, a.priority_score, a.final_rank_score,
-  a.summary, a.confidence, a.verified_high, a.source as analysis_source, a.batch_id,
-  t.status as triage_status, t.assignee, t.updated_by as triaged_by,
+  a.summary, a.rationale, a.confidence, a.verified_high, a.verify_basis,
+  a.verification_status, a.source as analysis_source, a.model, a.rubric_version, a.batch_id,
+  t.status as triage_status, t.assignee, t.notes as triage_notes, t.updated_by as triaged_by,
   (i.state = 'open' and coalesce(f.eligible, true)) as is_active
 from issues i
 left join features f using (number)
