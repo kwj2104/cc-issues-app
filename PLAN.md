@@ -6,25 +6,24 @@ Context: `CLAUDE.md` first, then `docs/`, then `design/` for Phase 3+.
 
 ## Phase 0 — Setup (human + scaffold) ✅ mostly done by kit
 
-- [ ] Kevin: accounts, secrets, schema applied (see `README.md` — ~30 min, one-time)
+- [x] Kevin: accounts, secrets, schema applied (see `README.md` — ~30 min, one-time)
 - [x] Repo scaffold, schema, workflows, prompts, config, design assets (this kit)
-- [ ] Sanity: `workflow_dispatch` the sync workflow — it should fail gracefully at
-      "module pipeline.sync not found" (that's Phase 1's job), proving auth + setup wiring
+- [x] Sanity: `workflow_dispatch` proven — sync/backfill/nightly all run green on live data
 
 ## Phase 1 — Data layer (pipeline foundation)
 
 Implement per `docs/retrieval-spec.md`, storing to Supabase (`db.py` owns the DSN + upsert
 helpers; `psycopg` with `execute_values`-style batching).
 
-- [ ] `pipeline/db.py` — connection from env, upsert helpers, `sync_state` get/set
-- [ ] `pipeline/ingest.py` — census crawl + delta sync (cursor semantics, PR-skip, rate-limit
+- [x] `pipeline/db.py` — connection from env, upsert helpers, `sync_state` get/set
+- [x] `pipeline/ingest.py` — census crawl + delta sync (cursor semantics, PR-skip, rate-limit
       handling, `state_reason` capture)
-- [ ] `pipeline/features.py` — text prep + all feature formulas (exact spec math)
-- [ ] `pipeline/cluster.py` — TF-IDF + union-find full recluster; provisional nearest-cluster assign
-- [ ] `pipeline/backfill.py --mode census` — full crawl → issues + features + clusters + scores
-- [ ] `pipeline/backfill.py --mode seed-import` — map `data/seed/claude_code_issue_log.csv` →
+- [x] `pipeline/features.py` — text prep + all feature formulas (exact spec math)
+- [x] `pipeline/cluster.py` — TF-IDF + union-find full recluster; provisional nearest-cluster assign
+- [x] `pipeline/backfill.py --mode census` — full crawl → issues + features + clusters + scores
+- [x] `pipeline/backfill.py --mode seed-import` — map `data/seed/claude_code_issue_log.csv` →
       `analysis` rows (`source='seed-review'`)
-- [ ] `pipeline/tests/` — text prep fixtures, formula hand-checks, stale-rescue boundary (9 vs 10),
+- [x] `pipeline/tests/` — text prep fixtures, formula hand-checks, stale-rescue boundary (9 vs 10),
       junk filter, cursor advance-only-on-success
 
 **Acceptance:** census run completes against the live repo; row count within ±1% of the
@@ -34,18 +33,22 @@ seed import lands ~1,000 `analysis` rows; a second census run changes nothing (i
 
 ## Phase 2 — Classifier + scheduled sync
 
-- [ ] `pipeline/classify.py` — digest builder (number, title, body_lead ≤1200, labels, engagement,
+- [x] `pipeline/classify.py` — digest builder (number, title, body_lead ≤1200, labels, engagement,
       age, cluster + 2 exemplar titles) → batches of ~20 → headless `claude -p` with
       `prompts/rubric_v2.md` + `output_schema.json` → parse/validate
 - [ ] Few-shot exemplars: 4–6 seed-review rows stratified by area, embedded in the prompt
-- [ ] Verify pass (`prompts/verify_v1.md`) for first-pass H / score ≥ 70 → `verified_high`
-- [ ] Blended `final_rank_score` per `config.blend` (normalize components; store all)
-- [ ] `pipeline/sync.py` — orchestrate: delta → features → classify changed/new → verify → upsert →
+      — DEFERRED: v1.2 calibration validated rubric-only; add as a precision pass later (would
+      change classify behavior, so re-run the verify acceptance after)
+- [x] Verify pass (`prompts/verify_v1.2.md`) for first-pass H / score ≥ 70 → `verified_high`
+      (v1.0 starved → v1.1 overcorrected → v1.2 veto + class-solo credibility; `verify_basis` stored)
+- [x] Blended `final_rank_score` per `config.blend` (normalize components; store all)
+- [x] `pipeline/sync.py` — orchestrate: delta → features → classify changed/new → verify → upsert →
       `batches` row (counts, `GHA_RUN_URL`, status), incl. triage interplay
       (open triage + issue closed upstream → status `resolved-upstream-confirm`)
-- [ ] `pipeline/backfill.py --mode catchup` — classify pending eligible set, ≤ `catchup_per_run`
-- [ ] `pipeline/nightly.py` — age-term recompute, full recluster, Sunday QA sample → results into
-      `sync_state` (`qa_area_agreement`, `qa_high_share`)
+- [x] `pipeline/backfill.py --mode catchup` — classify pending eligible set, ≤ `catchup_per_run`
+      (retrieval_score-desc order; scheduled 6×/day to auto-drain)
+- [x] `pipeline/nightly.py` — age-term recompute, full recluster, Sunday QA sample → results into
+      `sync_state` (`qa_area_agreement`, `qa_high_share`) — QA path first fires this Sunday
 
 **Acceptance:** a `workflow_dispatch` sync run on live data completes green in <8 min; new issues
 since the cursor appear in `analysis` with sane classifications; a verified-High requires two
