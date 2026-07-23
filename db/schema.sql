@@ -1,4 +1,8 @@
--- Claude Code Issue Tracker — Supabase schema (v1.1)
+-- Claude Code Issue Tracker — Supabase schema (v1.2)
+-- Migrations: v1.2 (2026-07-23) adds analysis.verify_basis ('corroborated'|'class-solo'|null),
+--   distinguishing verify confirms backed by breadth/corroboration from solo class-based confirms,
+--   plus verify_{reactions,cluster_size,band_decile} — the evidence snapshot at verify time that the
+--   re-verify triggers compare against (cluster grows ≥2×, reactions cross the next band decile, …).
 -- Run this once in the Supabase SQL Editor (Dashboard → SQL Editor → paste → Run).
 -- Writes happen only via the service_role key (GitHub Actions + the edit-secret API route);
 -- the anon key gets read-only access through RLS policies below.
@@ -66,6 +70,10 @@ create table if not exists analysis (
   verification_status text,      -- confirmed-active | likely-active | ... (seed import carries the review's values)
   verification_evidence text,
   verified_high   boolean not null default false,    -- passed the adversarial second pass
+  verify_basis    text,                               -- corroborated | class-solo | null (verify_v1.2+)
+  verify_reactions   int,                             -- evidence snapshot at verify time (re-verify triggers)
+  verify_cluster_size int,
+  verify_band_decile  int,
   source          text not null default 'interval',  -- seed-review | backfill | interval
   model           text,
   rubric_version  text,
@@ -108,7 +116,7 @@ create table if not exists sync_state (
   value text not null
 );
 -- seeded keys: since_cursor, rubric_version, schema_version
-insert into sync_state(key,value) values ('schema_version','1.1'), ('rubric_version','v2.0')
+insert into sync_state(key,value) values ('schema_version','1.2'), ('rubric_version','v2.0')
   on conflict (key) do nothing;
 
 -- ============ views ============

@@ -25,14 +25,6 @@ from . import ingest
 
 SEED_CSV = db.REPO_ROOT / "data" / "seed" / "claude_code_issue_log.csv"
 
-# Columns the issues upsert overwrites on conflict (first_seen_at is insert-only).
-_ISSUE_UPDATE_COLS = [
-    "title", "body_lead", "state", "state_reason", "labels", "created_at",
-    "updated_at", "closed_at", "comments", "reactions_total", "reactions_plus1",
-    "author_association", "maintainer_authored", "locked", "active_lock_reason",
-    "html_url", "last_seen_at",
-]
-
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -62,7 +54,7 @@ def run_census(gha_run_url: str | None = None) -> dict[str, int]:
         batch_id = db.start_batch(conn, "backfill", gha_run_url)
         run_id = f"batch-{batch_id}"
 
-        db.upsert(conn, "issues", issues, update_cols=_ISSUE_UPDATE_COLS)
+        db.upsert(conn, "issues", issues, update_cols=db.ISSUE_UPDATE_COLS)
 
         feature_rows = []
         for issue in issues:
@@ -73,6 +65,12 @@ def run_census(gha_run_url: str | None = None) -> dict[str, int]:
             row["computed_at"] = as_of
             feature_rows.append(row)
         db.upsert(conn, "features", feature_rows)
+
+        # Seed the delta cursor at the census baseline so the first sync only picks up
+        # issues updated after the crawl (not a full re-pull).
+        if issues:
+            max_updated = max(i["updated_at"] for i in issues)
+            db.set_state(conn, "since_cursor", max_updated.isoformat())
 
         eligible = sum(1 for r in feature_rows if r["eligible"])
         db.finish_batch(conn, batch_id, status="ok",

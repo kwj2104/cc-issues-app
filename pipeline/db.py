@@ -26,6 +26,14 @@ from psycopg.rows import dict_row
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "pipeline" / "config.yaml"
 
+# Columns the issues upsert overwrites on conflict; first_seen_at is insert-only (never reset).
+ISSUE_UPDATE_COLS = [
+    "title", "body_lead", "state", "state_reason", "labels", "created_at",
+    "updated_at", "closed_at", "comments", "reactions_total", "reactions_plus1",
+    "author_association", "maintainer_authored", "locked", "active_lock_reason",
+    "html_url", "last_seen_at",
+]
+
 
 @lru_cache(maxsize=1)
 def load_config() -> dict[str, Any]:
@@ -160,10 +168,12 @@ def set_state(conn: psycopg.Connection, key: str, value: str) -> None:
 # ---------------------------------------------------------------------------
 
 def start_batch(conn: psycopg.Connection, kind: str, gha_run_url: str | None = None) -> int:
+    # clock_timestamp() (real wall-clock), NOT now() — the whole batch runs in one transaction,
+    # where now() is constant, which would make every duration read 0.
     with conn.cursor() as cur:
         cur.execute(
-            "insert into batches(kind, status, gha_run_url) values (%s, 'running', %s) "
-            "returning id",
+            "insert into batches(kind, status, gha_run_url, started_at) "
+            "values (%s, 'running', %s, clock_timestamp()) returning id",
             (kind, gha_run_url),
         )
         return cur.fetchone()["id"]
@@ -171,7 +181,7 @@ def start_batch(conn: psycopg.Connection, kind: str, gha_run_url: str | None = N
 
 def finish_batch(conn: psycopg.Connection, batch_id: int, *, status: str = "ok",
                  error: str | None = None, **counts: int) -> None:
-    fields = ["finished_at = now()", "status = %s", "error = %s"]
+    fields = ["finished_at = clock_timestamp()", "status = %s", "error = %s"]
     params: list[Any] = [status, error]
     for col, val in counts.items():
         fields.append(f"{col} = %s")

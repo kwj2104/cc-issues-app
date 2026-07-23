@@ -42,9 +42,10 @@ eligibility:
 classifier:
   model: sonnet                 # headless `claude -p --model sonnet`
   rubric: pipeline/prompts/rubric_v2.md
-  verify: pipeline/prompts/verify_v1.md
+  verify: pipeline/prompts/verify_v1.2.md   # veto lane + class-solo credibility bar (see header)
   output_schema: pipeline/prompts/output_schema.json
   rubric_version: v2.0
+  verify_version: v1.2                       # v1.0 starved → v1.1 overcorrected → v1.2 veto+credibility
   batch_size: 20                # issues per classify call
   verify_threshold: 70          # first-pass H or score ≥ this → adversarial second pass
   catchup_per_run: 150          # backlog classification cap per scheduled run

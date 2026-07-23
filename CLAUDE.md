@@ -27,11 +27,43 @@ one API route gated by `EDIT_SECRET`.
   using `DATABASE_URL` only (Supabase Session pooler, port 5432); the
   `SUPABASE_SERVICE_ROLE_KEY` is a PostgREST JWT for the web triage route, **not** the
   pipeline. (Switching to the Transaction pooler on 6543 requires `prepare_threshold=None`.)
-- **Classifier**: shell out to `claude -p --model sonnet --output-format json --json-schema
-  pipeline/prompts/output_schema.json` with the rubric as system prompt (`--append-system-prompt-file`
-  or prepended). Auth: `CLAUDE_CODE_OAUTH_TOKEN` env (CI) or logged-in session (local). Batch
-  ~20 digests per call. Include 4–6 few-shot exemplars drawn from seed-review rows, stratified by
-  area. Verify pass per `prompts/verify_v1.md` for first-pass High / score ≥ 70.
+- **Classifier**: shell out to `claude -p --model sonnet --output-format json` via
+  `pipeline/classify.py:run_structured` (classify + verify share it). Auth:
+  `CLAUDE_CODE_OAUTH_TOKEN` env (CI) or logged-in session (local). Batch ~20 digests per call.
+  Include 4–6 few-shot exemplars drawn from seed-review rows, stratified by area. Verify pass per
+  `prompts/verify_v1.md` for first-pass High / score ≥ 70, one call per candidate.
+  Headless-CLI facts (learned Phase 2 — do not regress):
+  - **`--system-prompt` FULL REPLACE**, not `--append-system-prompt`: the rubric (classify) or
+    verify prompt is the *entire* system prompt. Appending stacks it on Claude Code's ~34k-token
+    default agent prompt; replacing cuts per-call overhead ~13× (cache_creation 34k→2.6k) — real
+    rate-limit headroom across ~12 batches/day. These calls are pure text-in/JSON-out.
+  - **`--tools ""`** disables all built-in tools; classify/verify need none, and structured
+    output still works with tools off.
+  - **`--json-schema` takes inline JSON *content*, not a path**, AND the CLI cannot resolve a
+    draft-2020-12 `$schema` meta-ref — so strip top-level `$schema` (and cosmetic `title`) before
+    passing. `run_structured` does both. The schema-conforming object comes back in the envelope's
+    `structured_output` field (fallback: `json.loads(result)`).
+- **Verify calibration (frozen story — `verify_version` v1.2; the prompt is FROZEN, changes go
+  through a new version).** The adversarial pass is fed DETERMINISTIC evidence (`pipeline/evidence.py`):
+  in-band engagement/velocity percentiles (≤7d/8–30d/31–90d/>90d), `related_mass_0p4` (TF-IDF
+  neighbors at 0.4 — catches uniquely-worded issues the 0.6 duplicate clustering leaves singleton),
+  last-activity recency, latest release tag+date (in `sync_state`, judged not guessed), and the seed
+  review's prior. Getting here took three passes, DO NOT regress:
+  - **v1.0 starved** — pure "default to refute" confirmed ~nothing, even a 722-react billing issue and
+    seed-adjudicated Highs → empty `verified_high`.
+  - **v1.1 overcorrected** — two-sided lanes with no veto confirmed 90%, incl. cosmetic issues on
+    breadth alone.
+  - **v1.2 = veto + credibility + uncertainty-confirms**: (1) a VETO lane — cosmetic/polish, viable
+    workaround, or staleness-vs-current-release REFUTES regardless of engagement percentile; (2) a
+    class-based-solo lane — data-loss/security/consent-fail-open/billing CONFIRMS even solo IFF the
+    report clears a *deterministic-mechanism* credibility bar (concrete mechanism + repro/logs/version;
+    intermittent-without-repro fails); (3) the class-solo boundary is LLM-nondeterministic, so by
+    POLICY uncertainty there resolves to CONFIRM with `verify_basis='class-solo'` (a wrong confirm
+    costs a PM 30s behind a "solo report" marker; a wrong refute buries silent data-loss). The
+    empirical backstop — not pre-emptive censoring — is the Sunday QA monitor tracking how often
+    class-solo confirms later close `not_planned`/`invalid`; if that precision decays, revisit the bar.
+    `engagement_is_sparse` (reactions+comments < 10) gates the breadth percentile so fresh-band zeros
+    don't read as breadth.
 - **Idempotence is law**: every write is an upsert; the sync cursor advances only after a
   successful batch; any run can be safely re-run. A failed run must leave the DB consistent.
 - **Determinism**: feature math takes an explicit `as_of` timestamp; no unseeded randomness.

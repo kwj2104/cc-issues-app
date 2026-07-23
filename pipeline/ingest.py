@@ -196,6 +196,22 @@ def _crawl_since(session: requests.Session, url: str, base_params: dict[str, Any
         since = window_last
 
 
+def fetch_latest_release(cfg: dict[str, Any], *, token: str | None = None,
+                         sleep=time.sleep) -> dict[str, str | None]:
+    """Latest published release tag + date (for staleness judging). One call per sync.
+
+    Returns {"tag": ..., "date": ...}; both None if the repo has no releases.
+    """
+    session = _session(token)
+    url = f"{API_ROOT}/repos/{cfg['repo']}/releases/latest"
+    resp = session.get(url, timeout=60)
+    if resp.status_code == 404:
+        return {"tag": None, "date": None}
+    resp.raise_for_status()
+    data = resp.json()
+    return {"tag": data.get("tag_name"), "date": data.get("published_at")}
+
+
 def crawl_census(cfg: dict[str, Any], as_of: datetime, *, token: str | None = None,
                  stats: IngestStats | None = None, sleep=time.sleep) -> Iterator[dict[str, Any]]:
     """Full open-issue census (state=open), since-chunked to clear the pagination ceiling."""
