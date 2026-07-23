@@ -18,10 +18,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import blend
 from . import cluster as clust
 from . import db
+from . import evidence
 from . import features as feat
 from . import ingest
+from . import sync
 
 SEED_CSV = db.REPO_ROOT / "data" / "seed" / "claude_code_issue_log.csv"
 
@@ -158,12 +161,74 @@ def run_seed_import(csv_path: Path = SEED_CSV) -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# catchup
+# ---------------------------------------------------------------------------
+
+def _pending_count(conn) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """select count(*) n from issues i join features f using (number)
+               left join analysis a using (number)
+               where f.eligible and i.state = 'open' and a.number is null"""
+        )
+        return cur.fetchone()["n"]
+
+
+def run_catchup(limit: int | None = None, gha_run_url: str | None = None) -> dict[str, Any]:
+    """Classify the highest-value slice of the pending eligible backlog (≤ limit).
+
+    Pending = eligible, open, no analysis row yet. Ordered by retrieval_score desc so the
+    master list's top rows get covered first. Idempotent: each run drains the next slice;
+    dispatch repeatedly until pending reads zero. Everything ineligible keeps deterministic
+    scores only (never classified).
+    """
+    cfg = db.load_config()
+    limit = limit or cfg["classifier"]["catchup_per_run"]
+
+    with db.connect() as conn:
+        batch_id = db.start_batch(conn, "backfill", gha_run_url)
+        with conn.cursor() as cur:
+            cur.execute(
+                """select i.number from issues i join features f using (number)
+                   left join analysis a using (number)
+                   where f.eligible and i.state = 'open' and a.number is null
+                   order by f.retrieval_score desc
+                   limit %s""",
+                (limit,),
+            )
+            queue = [r["number"] for r in cur.fetchall()]
+
+        pending_before = _pending_count(conn)
+        if not queue:
+            db.finish_batch(conn, batch_id, status="ok")
+            print("[catchup] pending queue is empty — nothing to classify.")
+            return {"classified": 0, "pending_remaining": 0, "batch_id": batch_id}
+
+        print(f"[catchup] {pending_before} pending; classifying top {len(queue)} by retrieval_score …")
+        ctx = evidence.EvidenceContext(conn, cfg)
+        norms = blend.population_norms(conn)
+        classified, new_high = sync.process_queue(
+            conn, queue, cfg, batch_id, ctx, norms, source="backfill", tag="catchup"
+        )
+        db.finish_batch(conn, batch_id, status="ok", issues_seen=len(queue),
+                        classified_count=classified, new_high_count=new_high)
+        remaining = pending_before - classified
+
+    print(f"[catchup] classified {classified} ({new_high} verified_high); "
+          f"~{remaining} still pending. batch {batch_id}.")
+    return {"classified": classified, "new_high": new_high,
+            "pending_remaining": remaining, "batch_id": batch_id}
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser(prog="pipeline.backfill")
     ap.add_argument("--mode", required=True, choices=["census", "seed-import", "catchup"])
+    ap.add_argument("--limit", type=int, default=None,
+                    help="max issues to classify this run (catchup only; default config.catchup_per_run)")
     args = ap.parse_args()
 
     gha = os.environ.get("GHA_RUN_URL")
@@ -172,7 +237,7 @@ def main() -> None:
     elif args.mode == "seed-import":
         run_seed_import()
     elif args.mode == "catchup":
-        raise SystemExit("catchup is Phase 2 (LLM classification). Not yet implemented.")
+        run_catchup(limit=args.limit, gha_run_url=gha)
 
 
 if __name__ == "__main__":

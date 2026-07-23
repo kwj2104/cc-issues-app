@@ -116,7 +116,7 @@ def _provisional_features(conn, delta: list[dict[str, Any]], as_of: datetime,
 
 def _analysis_row(cls: dict[str, Any], verdict: dict[str, Any] | None, digest: dict[str, Any],
                   ev: dict[str, Any] | None, final_rank: float, cfg: dict[str, Any],
-                  batch_id: int) -> dict[str, Any]:
+                  batch_id: int, source: str) -> dict[str, Any]:
     """Assemble the analysis upsert row, applying any verify downgrade."""
     priority = cls["priority"]
     verified_high = False
@@ -159,12 +159,64 @@ def _analysis_row(cls: dict[str, Any], verdict: dict[str, Any] | None, digest: d
         "verify_reactions": v_react,
         "verify_cluster_size": v_cs,
         "verify_band_decile": v_decile,
-        "source": "interval",
+        "source": source,
         "model": cfg["classifier"]["model"],
         "rubric_version": cfg["classifier"]["rubric_version"],
         "batch_id": batch_id,
         "analyzed_at": _now(),
     }
+
+
+def _blend_inputs(conn, numbers: list[int]) -> dict[int, tuple[float, float]]:
+    """Bulk-fetch (rate_score, f_severity) for the blend, one query per chunk."""
+    if not numbers:
+        return {}
+    with conn.cursor() as cur:
+        cur.execute("select number, rate_score, f_severity from features where number = any(%s)",
+                    (numbers,))
+        return {r["number"]: (r["rate_score"], r["f_severity"]) for r in cur.fetchall()}
+
+
+def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
+                  ctx: evidence.EvidenceContext, norms: dict[str, float], *,
+                  source: str, tag: str = "sync") -> tuple[int, int]:
+    """Classify → verify (H/≥70) → blend → upsert analysis, in batches. Shared by sync + catchup.
+
+    Returns (classified_count, verified_high_count).
+    """
+    batch_size = cfg["classifier"]["batch_size"]
+    classified = new_high = 0
+    for start in range(0, len(queue), batch_size):
+        chunk = queue[start : start + batch_size]
+        digests = classify.digests_for(conn, chunk)
+        dmap = {d["number"]: d for d in digests}
+        blend_in = _blend_inputs(conn, chunk)
+        classifications, _ = classify.classify_batch(digests, cfg)
+
+        rows = []
+        for cls in classifications:
+            num = cls["number"]
+            digest = dmap.get(num)
+            if digest is None:
+                continue
+            verdict = None
+            ev = None
+            if verify.needs_verification(cls, cfg):
+                ev = ctx.enrich(num)
+                verdict, _ = verify.verify_one(digest, cls, cfg, evidence=ev)
+                # snapshot for the re-verify triggers (after verify, so it stays out of the prompt)
+                ev["_reactions"] = ctx.reactions.get(num)
+                ev["_band_decile"] = ctx.band_decile(num)
+            rate, sev = blend_in.get(num, (0.0, 0.0))
+            fr = blend.final_rank_score(cls.get("priority_score"), rate, sev,
+                                        digest.get("cluster_size", 1), cfg, norms)
+            row = _analysis_row(cls, verdict, digest, ev, fr, cfg, batch_id, source)
+            new_high += int(row["verified_high"])
+            rows.append(row)
+        db.upsert(conn, "analysis", rows)
+        classified += len(rows)
+        print(f"[{tag}] classified {classified}/{len(queue)} (verified_high {new_high})")
+    return classified, new_high
 
 
 def run_sync(gha_run_url: str | None = None) -> dict[str, Any]:
@@ -216,40 +268,8 @@ def run_sync(gha_run_url: str | None = None) -> dict[str, Any]:
               f"classify queue={len(queue)} (+{len(reverify)} re-verify)")
 
         norms = blend.population_norms(conn)
-        classified = 0
-        new_high = 0
-        batch_size = cfg["classifier"]["batch_size"]
-
-        for start in range(0, len(queue), batch_size):
-            chunk = queue[start : start + batch_size]
-            digests = classify.digests_for(conn, chunk)
-            dmap = {d["number"]: d for d in digests}
-            classifications, _ = classify.classify_batch(digests, cfg)
-
-            rows = []
-            for cls in classifications:
-                num = cls["number"]
-                digest = dmap.get(num)
-                if digest is None:
-                    continue
-                verdict = None
-                ev = None
-                if verify.needs_verification(cls, cfg):
-                    ev = ctx.enrich(num)
-                    verdict, _ = verify.verify_one(digest, cls, cfg, evidence=ev)
-                    # stash raw snapshot values for the re-verify triggers (after verify so
-                    # they don't pollute the prompt payload)
-                    ev["_reactions"] = ctx.reactions.get(num)
-                    ev["_band_decile"] = ctx.band_decile(num)
-                fr = blend.final_rank_score(cls.get("priority_score"), digest_rate(conn, num),
-                                            digest_sev(conn, num), digest.get("cluster_size", 1),
-                                            cfg, norms)
-                row = _analysis_row(cls, verdict, digest, ev, fr, cfg, batch_id)
-                if row["verified_high"]:
-                    new_high += 1
-                rows.append(row)
-            db.upsert(conn, "analysis", rows)
-            classified += len(rows)
+        classified, new_high = process_queue(conn, queue, cfg, batch_id, ctx, norms,
+                                             source="interval", tag="sync")
 
         # ---- triage interplay: active triage + upstream close → confirm ----
         newly_closed = [d["number"] for d in delta
@@ -274,21 +294,6 @@ def run_sync(gha_run_url: str | None = None) -> dict[str, Any]:
     print(f"[sync] done: classified {classified}, verified_high {new_high}. batch {batch_id}.")
     return {"batch_id": batch_id, "delta": len(delta), "classified": classified,
             "new_high": new_high, "cursor": max_updated.isoformat()}
-
-
-# Small helpers to read the two deterministic score components for the blend.
-def digest_rate(conn, number: int) -> float:
-    with conn.cursor() as cur:
-        cur.execute("select rate_score from features where number = %s", (number,))
-        r = cur.fetchone()
-    return r["rate_score"] if r else 0.0
-
-
-def digest_sev(conn, number: int) -> float:
-    with conn.cursor() as cur:
-        cur.execute("select f_severity from features where number = %s", (number,))
-        r = cur.fetchone()
-    return r["f_severity"] if r else 0.0
 
 
 def main() -> None:
