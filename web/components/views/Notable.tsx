@@ -12,8 +12,6 @@ type Row = VMaster & { batch_started_at: string };
 
 export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
-  const [acked, setAcked] = useState<Set<number>>(new Set());
-  const [unackOnly, setUnackOnly] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,34 +22,27 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
     });
   }, [onCount]);
 
-  const visible = rows.filter((r) => !unackOnly || !acked.has(r.number));
-  const groups = Array.from(new Set(visible.map((r) => r.batch_id)));
-
-  const ack = (n: number) => {
-    setAcked((s) => new Set(s).add(n));
-    ctx.toast(`#${n} acknowledged — triage write lands in Phase 4`);
-  };
+  const groups = Array.from(new Set(rows.map((r) => r.batch_id)));
 
   return (
     <section className="view">
       <div className="view-head">
         <h1 className="display">New &amp; Notable</h1>
-        <div className="view-sub">Issues that passed <b>verified High</b>, grouped by sync batch. Acknowledge to clear them from the queue.</div>
+        <div className="view-sub">Issues that passed <b>verified High</b>, grouped by sync batch — newest first.</div>
       </div>
       <div className="toolbar">
-        <span className={`chip-toggle${unackOnly ? " on" : ""}`} onClick={() => setUnackOnly((v) => !v)}>Unacknowledged only</span>
-        <span className="toolbar-meta">{rows.filter((r) => !acked.has(r.number)).length} unacknowledged across {new Set(rows.map((r) => r.batch_id)).size} batches</span>
+        <span className="toolbar-meta">{rows.length} verified-High across {new Set(rows.map((r) => r.batch_id)).size} batches</span>
       </div>
 
       {loading && <div className="card card-pad skeleton">Loading verified-High queue…</div>}
-      {!loading && visible.length === 0 && (
+      {!loading && rows.length === 0 && (
         <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
-          Queue clear — every verified-High issue is acknowledged.
+          No open verified-High issues yet — they appear here as the sync classifies new arrivals.
         </div>
       )}
 
       {groups.map((bid) => {
-        const items = visible.filter((r) => r.batch_id === bid);
+        const items = rows.filter((r) => r.batch_id === bid);
         if (!items.length) return null;
         return (
           <div className="batch-group" key={bid}>
@@ -62,11 +53,11 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
               <span>{items.length} verified High</span>
             </div>
             {items.map((i) => (
-              <div className={`card nn-card${acked.has(i.number) ? " acked" : ""}`} key={i.number}>
+              <div className="card nn-card" key={i.number} onClick={() => ctx.openDrawer(i)} style={{ cursor: "pointer" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
                   <PriorityPill priority={i.priority} verified={i.verified_high} />
                 </div>
-                <div className="nn-main" onClick={() => ctx.openDrawer(i)} style={{ cursor: "pointer" }}>
+                <div className="nn-main">
                   <div className="nn-title">{i.title}</div>
                   <div className="nn-meta">
                     <span className="t-num mono">#{i.number}</span>
@@ -78,7 +69,6 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
                   </div>
                 </div>
                 <div className="nn-score"><b>{Math.round(i.final_rank_score ?? i.retrieval_score ?? 0)}</b><span>rank score</span></div>
-                <button className="btn ack-btn" onClick={() => ack(i.number)}>{acked.has(i.number) ? "Acknowledged ✓" : "Acknowledge"}</button>
               </div>
             ))}
           </div>

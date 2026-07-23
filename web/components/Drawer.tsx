@@ -6,7 +6,7 @@ import type { VMaster } from "@/lib/types";
 import { THEME_NAMES } from "@/lib/types";
 import { fmtK, fmtAge, relDays } from "@/lib/format";
 import { PriorityPill } from "./ui";
-import { IconClose, IconExternal, IconLock, IconCheck } from "./Icons";
+import { IconClose, IconExternal } from "./Icons";
 
 // Illustrative 0-100 normalization of the four blend components (exact weights in pipeline
 // config; population-normalized components are computed server-side at blend time).
@@ -17,7 +17,13 @@ const comps = (r: VMaster) => [
   ["Cluster mass", Math.min(100, Math.round((Math.log2(Math.max(1, r.cluster_size ?? 1)) / Math.log2(140)) * 100)), 0.1],
 ] as const;
 
-export function Drawer({ row, editing, onClose, toast }: { row: VMaster | null; editing: boolean; onClose: () => void; toast: (m: string) => void }) {
+const TRIAGE_LABEL: Record<string, string> = {
+  untriaged: "Untriaged", acknowledged: "Acknowledged", investigating: "Investigating",
+  escalated: "Escalated", resolved: "Resolved", wontfix: "Won’t fix",
+  "resolved-upstream-confirm": "Resolved upstream — confirm",
+};
+
+export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => void }) {
   const [members, setMembers] = useState<number[]>([]);
   const [body, setBody] = useState<string | null>(null);
 
@@ -129,24 +135,10 @@ export function Drawer({ row, editing, onClose, toast }: { row: VMaster | null; 
             <div className="d-sec">
               <div className="d-label">Triage</div>
               <div className="tri-panel">
-                <div className="tri-lock">
-                  {editing ? <IconCheck stroke="var(--good)" /> : <IconLock />}
-                  {editing ? "Editing unlocked — changes attributed to Kevin" : "Read-only — unlock editing in the top bar to triage"}
-                </div>
-                <div className="tri-form">
-                  <div><label>Status</label>
-                    <select disabled={!editing} defaultValue={row.triage_status ?? "untriaged"}>
-                      <option value="untriaged">Untriaged</option><option value="acknowledged">Acknowledged</option>
-                      <option value="investigating">Investigating</option><option value="escalated">Escalated</option>
-                      <option value="resolved">Resolved</option><option value="wontfix">Won’t fix</option>
-                    </select>
-                  </div>
-                  <div><label>Assignee</label><input disabled={!editing} defaultValue={row.assignee ?? ""} placeholder="unassigned" /></div>
-                  <div className="full"><label>Notes</label><textarea disabled={!editing} defaultValue={row.triage_notes ?? ""} placeholder="Add triage context…" /></div>
-                  <div className="full" style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn primary" disabled={!editing} onClick={() => toast("Triage writes land in Phase 4 (edit-secret API route)")}>Save</button>
-                  </div>
-                </div>
+                <div className="kv"><span>Status</span><b>{TRIAGE_LABEL[row.triage_status ?? "untriaged"] ?? "Untriaged"}</b></div>
+                <div className="kv"><span>Assignee</span><b>{row.assignee || "unassigned"}</b></div>
+                {row.triage_notes ? <div className="kv"><span>Notes</span><b style={{ fontWeight: 400, textAlign: "right" }}>{row.triage_notes}</b></div> : null}
+                {row.triaged_by ? <div className="kv"><span>Updated by</span><b>{row.triaged_by}</b></div> : null}
               </div>
             </div>
 

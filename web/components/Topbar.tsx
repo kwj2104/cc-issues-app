@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { timeET } from "@/lib/format";
-import { IconLock, IconCheck } from "./Icons";
 
-export function Topbar({ title, editing, onUnlock }: { title: string; editing: boolean; onUnlock: () => void }) {
+export function Topbar({ title }: { title: string }) {
   const [pill, setPill] = useState<string>("Loading sync status…");
 
   useEffect(() => {
@@ -30,10 +29,6 @@ export function Topbar({ title, editing, onUnlock }: { title: string; editing: b
           <span className="sync-dot" />
           {pill}
         </div>
-        <button className={`btn${editing ? " unlocked" : ""}`} onClick={onUnlock}>
-          {editing ? <IconCheck /> : <IconLock />}
-          {editing ? "Editing unlocked" : "Unlock editing"}
-        </button>
       </div>
     </div>
   );

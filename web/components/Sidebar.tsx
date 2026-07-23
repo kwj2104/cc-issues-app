@@ -2,7 +2,7 @@
 
 import type { ViewKey, MasterPreset } from "./AppShell";
 import {
-  Starburst, IconSync, IconDash, IconNotable, IconMaster, IconThemes, IconOps, IconSun, IconMoon,
+  Starburst, IconDash, IconNotable, IconMaster, IconThemes, IconOps, IconSun, IconMoon,
 } from "./Icons";
 
 const NAV: { key: ViewKey; label: string; Icon: (p: any) => JSX.Element }[] = [
@@ -20,7 +20,7 @@ const SAVED: { label: string; dot: string; preset: MasterPreset }[] = [
 ];
 
 export function Sidebar({
-  active, newHigh, theme, onNav, onTheme, onSavedView, onRunSync,
+  active, newHigh, theme, onNav, onTheme, onSavedView,
 }: {
   active: ViewKey;
   newHigh: number;
@@ -28,7 +28,6 @@ export function Sidebar({
   onNav: (v: ViewKey) => void;
   onTheme: (t: "light" | "dark") => void;
   onSavedView: (p: MasterPreset) => void;
-  onRunSync: () => void;
 }) {
   return (
     <aside className="sidebar">
@@ -37,11 +36,7 @@ export function Sidebar({
         <span className="logo-name">Claude Code</span>
         <span className="logo-sub">INTERNAL</span>
       </div>
-      <button className="sync-cta" onClick={onRunSync}>
-        <IconSync />
-        Run sync now
-      </button>
-      <div className="nav-label">ISSUE TRACKER</div>
+      <div className="nav-label" style={{ paddingTop: 4 }}>ISSUE TRACKER</div>
       {NAV.map(({ key, label, Icon }) => (
         <button key={key} className={`nav-item${active === key ? " active" : ""}`} onClick={() => onNav(key)}>
           <Icon />

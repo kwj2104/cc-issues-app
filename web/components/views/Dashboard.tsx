@@ -130,15 +130,6 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
           </svg>
         </div>
       </div>
-
-      <div className="ask-bar">
-        <Starburst className="spark-ic" />
-        <input placeholder="Ask about this backlog…  e.g. “what changed in consent-enforcement this week?”" disabled />
-        <span className="ask-model">Sonnet</span>
-        <button className="ask-send" onClick={() => ctx.toast("Backlog Q&A ships in v2")} aria-label="Send">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ width: 15, height: 15 }}><path d="M12 19V5M5 12l7-7 7 7" /></svg>
-        </button>
-      </div>
     </section>
   );
 }

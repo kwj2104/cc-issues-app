@@ -24,7 +24,6 @@ const TITLES: Record<ViewKey, string> = {
 };
 
 export interface ShellCtx {
-  editing: boolean;
   openDrawer: (row: VMaster) => void;
   toast: (msg: string) => void;
   goMaster: (preset: MasterPreset) => void;
@@ -34,8 +33,6 @@ export function AppShell() {
   const [view, setView] = useState<ViewKey>("dash");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [drawerRow, setDrawerRow] = useState<VMaster | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [unlockOpen, setUnlockOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [newHigh, setNewHigh] = useState<number>(0);
   const [preset, setPreset] = useState<MasterPreset>(null);
@@ -77,7 +74,7 @@ export function AppShell() {
     document.querySelector("main")?.scrollTo(0, 0);
   };
 
-  const ctx: ShellCtx = { editing, openDrawer, toast, goMaster };
+  const ctx: ShellCtx = { openDrawer, toast, goMaster };
 
   return (
     <>
@@ -88,19 +85,9 @@ export function AppShell() {
         onNav={nav}
         onTheme={applyTheme}
         onSavedView={(p) => goMaster(p)}
-        onRunSync={() => toast("Sync runs on the 2-hour GitHub Actions cron · next batch soon")}
       />
       <div className="app">
-        <Topbar
-          title={TITLES[view]}
-          editing={editing}
-          onUnlock={() => {
-            if (editing) {
-              setEditing(false);
-              toast("Editing locked");
-            } else setUnlockOpen(true);
-          }}
-        />
+        <Topbar title={TITLES[view]} />
         <main>
           <div className="content">
             {view === "dash" && <Dashboard ctx={ctx} />}
@@ -113,42 +100,7 @@ export function AppShell() {
       </div>
 
       <div className={`backdrop${drawerRow ? " on" : ""}`} onClick={() => setDrawerRow(null)} />
-      <Drawer row={drawerRow} editing={editing} onClose={() => setDrawerRow(null)} toast={toast} />
-
-      <div className={`modal-wrap${unlockOpen ? " on" : ""}`}>
-        <div className="backdrop on" style={{ position: "absolute" }} onClick={() => setUnlockOpen(false)} />
-        <div className="modal">
-          <h2>Unlock editing</h2>
-          <p>
-            Triage fields are read-only for viewers. Enter the team edit key to change status, assignee, and notes.
-            Edits are attributed and logged.
-          </p>
-          <input
-            type="password"
-            placeholder="Edit key"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setEditing(true);
-                setUnlockOpen(false);
-                toast("Editing unlocked — triage writes enabled");
-              }
-            }}
-          />
-          <div className="modal-btns">
-            <button className="btn" onClick={() => setUnlockOpen(false)}>Cancel</button>
-            <button
-              className="btn primary"
-              onClick={() => {
-                setEditing(true);
-                setUnlockOpen(false);
-                toast("Editing unlocked — triage writes enabled");
-              }}
-            >
-              Unlock
-            </button>
-          </div>
-        </div>
-      </div>
+      <Drawer row={drawerRow} onClose={() => setDrawerRow(null)} />
 
       <div className={`toast${toastMsg ? " on" : ""}`}>{toastMsg}</div>
     </>
