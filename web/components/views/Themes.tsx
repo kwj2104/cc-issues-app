@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES } from "@/lib/types";
 import { PriorityPill } from "../ui";
@@ -9,6 +10,7 @@ import type { ShellCtx } from "../AppShell";
 
 export function Themes({ ctx }: { ctx: ShellCtx }) {
   const [data, setData] = useState<{ key: string; count: number; top: VMaster[] }[]>([]);
+  const version = useDataVersion();
 
   useEffect(() => {
     (async () => {
@@ -21,7 +23,7 @@ export function Themes({ ctx }: { ctx: ShellCtx }) {
       );
       setData(out.sort((a, b) => b.count - a.count));
     })();
-  }, []);
+  }, [version]);
 
   const max = Math.max(1, ...data.map((d) => d.count));
 
@@ -36,19 +38,20 @@ export function Themes({ ctx }: { ctx: ShellCtx }) {
           <div className="card card-pad theme-card" key={t.key}>
             <h3>{THEME_NAMES[t.key]}</h3>
             <div className="tc-meta"><b style={{ color: "var(--text)" }}>{t.count} open</b><span>classified active set</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div className="meter" style={{ background: "var(--card-2)" }}><i style={{ width: `${(t.count / max) * 100}%` }} /></div>
-            </div>
+            <div className="meter" style={{ background: "var(--card-2)" }}><i style={{ width: `${(t.count / max) * 100}%` }} /></div>
             <div className="tc-issues">
               {t.top.length === 0 && <div style={{ color: "var(--text-3)", fontSize: 12.5 }}>No classified issues yet.</div>}
               {t.top.map((i) => (
                 <div className="tc-row" key={i.number} onClick={() => ctx.openDrawer(i)}>
                   <span className="t-num">#{i.number}</span>
                   <span className="tc-t">{i.title}</span>
-                  <PriorityPill priority={i.priority} verified={i.verified_high} />
+                  <PriorityPill priority={i.priority} />
                 </div>
               ))}
             </div>
+            <button className="btn btn-sm tc-all" onClick={() => ctx.goMaster({ theme: t.key })}>
+              View all {t.count} →
+            </button>
           </div>
         ))}
       </div>

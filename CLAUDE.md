@@ -70,12 +70,25 @@ one API route gated by `EDIT_SECRET`.
 - **Web**: Next.js App Router + TypeScript + Tailwind (tokens as CSS variables per
   `design/design-spec.md`) + TanStack Table/Query. Reads via `NEXT_PUBLIC_SUPABASE_*` anon key
   against `v_master`/`v_new_high`. Never import the service key into `web/`.
+  - **Live refresh**: `web/lib/refresh.tsx` polls the newest `batches` row (id + status) every
+    60s, plus on tab focus, and bumps a `version` counter when it changes. Every view takes
+    `useDataVersion()` as an effect dependency, so a landing batch refreshes the whole app in
+    place — an open tab is never stale. Add that dep to any new view that reads Supabase.
+  - Layout rule learned the hard way: grid tracks are `minmax(0,1fr)` and nowrap flex children
+    carry `min-width:0`. A bare `1fr` is `minmax(auto,1fr)`, so one long issue title pushes the
+    whole page sideways (this is what sent Themes off-screen). Mobile is a real target: the
+    sidebar becomes an off-canvas drawer under 900px.
 - **Secrets**: only via env / GH secrets / Vercel env. Never in code, never in git.
 
 ## Commands
 
 - Pipeline locally: `cp .env.example .env` (fill it) → `pip install -r pipeline/requirements.txt`
-  → `python -m pipeline.sync` (or `backfill --mode census|seed-import|catchup`, `nightly`).
+  → `python -m pipeline.sync` (or `backfill --mode census|seed-import|catchup|closed-history`,
+  `nightly`). `closed-history` is a repair job: the census is `state=open`, so issues closed
+  before the first delta sync never landed and the dashboard's closes line read flat for those
+  days. It crawls `state=closed --since` (default 2026-07-11), upserts, and adds features only
+  for rows that have none — always as singletons, since clustering's universe is the *open*
+  backlog. It never touches `since_cursor`.
 - DB: schema lives in `db/schema.sql` (idempotent; paste into Supabase SQL Editor to apply).
   Schema changes: edit that file AND note the migration in its header comment.
 - Web: `cd web && npm run dev`. Deploy: Vercel Git integration, root directory `web`.

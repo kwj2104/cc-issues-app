@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useDataVersion } from "@/lib/refresh";
 import { THEME_NAMES } from "@/lib/types";
 import { timeET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
 import { Starburst } from "../Icons";
-
-const css = (v: string) => (typeof window !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue(v).trim() : "");
 
 async function count(build: (q: any) => any): Promise<number> {
   const { count } = await build(supabase.from("v_master").select("number", { count: "exact", head: true }));
@@ -15,8 +14,9 @@ async function count(build: (q: any) => any): Promise<number> {
 }
 
 export function Dashboard({ ctx }: { ctx: ShellCtx }) {
-  const [kpi, setKpi] = useState({ active: 0, new24: 0, vhigh: 0 });
+  const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
   const [batch, setBatch] = useState<any>(null);
+  const version = useDataVersion();
   const [prio, setPrio] = useState<{ H: number; M: number; L: number }>({ H: 0, M: 0, L: 0 });
   const [themes, setThemes] = useState<[string, number][]>([]);
   const [trend, setTrend] = useState<{ opened: number[]; closed: number[]; days: string[] }>({ opened: [], closed: [], days: [] });
@@ -26,10 +26,10 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       const active = await count((q) => q.eq("is_active", true));
       const since = new Date(Date.now() - 86400000).toISOString();
       const { count: new24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("created_at", since);
-      const { count: vhigh } = await supabase.from("v_new_high").select("number", { count: "exact", head: true });
-      setKpi({ active, new24: new24 ?? 0, vhigh: vhigh ?? 0 });
+      const { count: closed24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("closed_at", since);
+      setKpi({ active, new24: new24 ?? 0, closed24: closed24 ?? 0 });
 
-      const { data: b } = await supabase.from("batches").select("*").in("kind", ["interval", "recluster"]).order("started_at", { ascending: false }).limit(5);
+      const { data: b } = await supabase.from("batches").select("*").in("kind", ["interval", "recluster"]).order("started_at", { ascending: false }).limit(1);
       setBatch(b ?? []);
 
       const [H, M, L] = await Promise.all([
@@ -61,7 +61,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       await Promise.all(jobs);
       setTrend({ opened, closed, days });
     })();
-  }, []);
+  }, [version]);
 
   const prioTotal = prio.H + prio.M + prio.L || 1;
   const maxTheme = Math.max(1, ...themes.map((t) => t[1]));
@@ -80,7 +80,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       <div className="grid grid-kpi">
         <Tile label="Active issues" value={kpi.active.toLocaleString()} sub="open & eligible" />
         <Tile label="New issues (24h)" value={kpi.new24.toLocaleString()} sub="created in the last day" />
-        <Tile label="Verified High · open" value={String(kpi.vhigh)} sub="passed the adversarial pass" />
+        <Tile label="Closed (24h)" value={kpi.closed24.toLocaleString()} sub="closed in the last day" />
         <Tile
           label="Last sync"
           value={batch?.[0] ? timeET(batch[0].started_at) : "—"}
@@ -90,7 +90,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
 
       <div className="grid grid-2a">
         <div className="card card-pad">
-          <div className="card-head"><div><div className="card-title">Intake vs. closes</div><div className="card-sub">Issues opened and closed per day · last 14 days</div></div></div>
+          <div className="card-head"><div><div className="card-title">Intake vs. closes</div><div className="card-sub">Issues opened and closed per day · last 14 days · today is partial</div></div></div>
           <IntakeChart {...trend} />
         </div>
         <div className="card card-pad">
@@ -99,35 +99,19 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         </div>
       </div>
 
-      <div className="grid grid-2b">
-        <div className="card card-pad">
-          <div className="card-head"><div><div className="card-title">Latest batches</div><div className="card-sub">Scheduled sync · every 2 hours</div></div>
-            <div className="card-tools"><button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => ctx.goMaster(null)}>Master list</button></div>
-          </div>
-          {(batch ?? []).map((b: any) => (
-            <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "8.5px 2px", borderBottom: "1px solid var(--hairline)", fontSize: 12.5 }}>
-              <span className="sync-dot" style={{ animation: "none", background: b.status === "ok" ? "var(--good)" : "var(--med-mark)" }} />
-              <b style={{ fontVariantNumeric: "tabular-nums" }}>#{b.id}</b>
-              <span style={{ color: "var(--text-3)" }}>{timeET(b.started_at)}</span>
-              <span style={{ color: "var(--text-3)", marginLeft: "auto" }}>{b.kind === "recluster" ? "nightly recluster" : `${b.new_count} new · ${b.classified_count} classified`}</span>
-              {b.new_high_count > 0 ? <span className="pill hi">{b.new_high_count} High</span> : <span style={{ color: "var(--micro)" }}>—</span>}
-            </div>
-          ))}
+      <div className="card card-pad">
+        <div className="card-head">
+          <div><div className="card-title">Open issues by theme</div><div className="card-sub">Classified active set · click a bar to filter the master list</div></div>
+          <div className="card-tools"><button className="btn btn-sm" onClick={() => ctx.goMaster(null)}>Master list</button></div>
         </div>
-        <div className="card card-pad">
-          <div className="card-head"><div><div className="card-title">Open issues by theme</div><div className="card-sub">Classified active set</div></div></div>
-          <svg className="chart-svg" viewBox={`0 0 560 ${themes.length * 30 + 6}`} width="100%">
-            {themes.map(([k, n], i) => {
-              const y = i * 30 + 8, bw = Math.max(6, (n / maxTheme) * (560 - 168 - 54));
-              return (
-                <g key={k}>
-                  <text x={158} y={y + 11} textAnchor="end" className="axis-txt" style={{ fontSize: 12, fill: "var(--text-2)" }}>{THEME_NAMES[k]}</text>
-                  <rect x={168} y={y} width={bw} height={14} rx={4} fill="var(--s1)" style={{ cursor: "pointer" }} onClick={() => ctx.goMaster({ theme: k })} />
-                  <text x={168 + bw + 8} y={y + 11} className="axis-txt" style={{ fontSize: 11.5, fontWeight: 600, fill: "var(--text-2)" }}>{n}</text>
-                </g>
-              );
-            })}
-          </svg>
+        <div className="theme-bars">
+          {themes.map(([k, n]) => (
+            <button className="theme-bar-row" key={k} onClick={() => ctx.goMaster({ theme: k })}>
+              <span className="tb-name">{THEME_NAMES[k]}</span>
+              <span className="tb-track"><i style={{ width: `${Math.max(2, (n / maxTheme) * 100)}%` }} /></span>
+              <span className="tb-val">{n}</span>
+            </button>
+          ))}
         </div>
       </div>
     </section>
@@ -201,15 +185,22 @@ function IntakeChart({ opened, closed, days }: { opened: number[]; closed: numbe
         {series.map((s) => (
           <polyline key={s.n} points={s.d.map((v, i) => `${X(i)},${Y(v)}`).join(" ")} fill="none" stroke={s.c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         ))}
-        {series.map((s) => {
-          const i = s.d.length - 1;
-          return (
+        {(() => {
+          // End labels sit at each line's last point, but the two series often finish within a
+          // few px of each other — nudge them apart so the text never overlaps.
+          const i = opened.length - 1;
+          const raw = series.map((s) => Y(s.d[i]));
+          const [a, b] = raw;
+          const MIN = 13;
+          const push = Math.abs(a - b) < MIN ? (MIN - Math.abs(a - b)) / 2 : 0;
+          const labelY = push === 0 ? raw : a <= b ? [a - push, b + push] : [a + push, b - push];
+          return series.map((s, si) => (
             <g key={s.n + "e"}>
               <circle cx={X(i)} cy={Y(s.d[i])} r={4.2} fill={s.c} stroke="var(--card)" strokeWidth={2} />
-              <text x={X(i) + 10} y={Y(s.d[i]) + 4} className="axis-txt" style={{ fontSize: 11.5, fontWeight: 600, fill: "var(--text-2)" }}>{s.n} {s.d[i]}</text>
+              <text x={X(i) + 10} y={labelY[si] + 4} className="axis-txt" style={{ fontSize: 11.5, fontWeight: 600, fill: "var(--text-2)" }}>{s.n} {s.d[i]}</text>
             </g>
-          );
-        })}
+          ));
+        })()}
       </svg>
       <div className="legend">
         {series.map((s) => (

@@ -1,8 +1,9 @@
 """One-time backfill entrypoints.
 
-  python -m pipeline.backfill --mode census       # full open-issue crawl → issues + features + clusters + scores
-  python -m pipeline.backfill --mode seed-import   # data/seed CSV → analysis rows (source='seed-review')
-  python -m pipeline.backfill --mode catchup       # (Phase 2) LLM catch-up classification
+  python -m pipeline.backfill --mode census          # full open-issue crawl → issues + features + clusters + scores
+  python -m pipeline.backfill --mode seed-import     # data/seed CSV → analysis rows (source='seed-review')
+  python -m pipeline.backfill --mode catchup         # (Phase 2) LLM catch-up classification
+  python -m pipeline.backfill --mode closed-history  # closed issues the open-only census missed
 
 Idempotence is law: every write is an upsert, so any mode can be safely re-run. A census
 re-run changes no data (only bookkeeping timestamps); seed-import re-run is a no-op on the
@@ -82,6 +83,75 @@ def run_census(gha_run_url: str | None = None) -> dict[str, int]:
     print(f"[census] done: {len(issues)} issues, {eligible} eligible, "
           f"{len(set(c for c, _ in clusters.values()))} clusters. batch {batch_id}.")
     return {"issues": len(issues), "eligible": eligible, "batch_id": batch_id}
+
+
+# ---------------------------------------------------------------------------
+# closed-history
+# ---------------------------------------------------------------------------
+
+CLOSED_HISTORY_SINCE = "2026-07-11T00:00:00Z"
+
+
+def run_closed_history(since: str = CLOSED_HISTORY_SINCE,
+                       gha_run_url: str | None = None) -> dict[str, int]:
+    """Backfill issues closed since `since` (census is state=open, so they were missing).
+
+    The dashboard's intake-vs-closes chart reads `issues.created_at` / `issues.closed_at`.
+    Because the census only ever crawled open issues, the only closed rows in the DB were
+    the ones a delta sync happened to watch close — so the closes line read ~0 for every
+    day before the first sync, and intake under-counted issues that were opened and closed
+    in the same window. This crawls `state=closed` and upserts them.
+
+    Features: computed only for issues that don't have a features row yet, and always as
+    singletons. Clustering's universe is the *open* backlog (nightly reclusters over open
+    issues); attaching closed rows to open clusters would inflate cluster mass with issues
+    that are no longer live. Existing features rows are left untouched.
+
+    Idempotent: pure upsert, and it deliberately does NOT touch `since_cursor` — the delta
+    sync's cursor semantics are unaffected by this run.
+    """
+    cfg = db.load_config()
+    as_of = _now()
+    stats = ingest.IngestStats()
+
+    print(f"[closed-history] crawling closed issues for {cfg['repo']} since {since} …")
+    issues = [i for i in ingest.crawl_closed(cfg, since, as_of, stats=stats)
+              if i["closed_at"] is not None]
+    print(f"[closed-history] {len(issues)} closed issues over {stats.pages} pages "
+          f"({stats.prs_skipped} PRs, {stats.stubs_skipped} stubs skipped)")
+
+    if not issues:
+        return {"issues": 0, "features_added": 0, "batch_id": 0}
+
+    with db.connect() as conn:
+        batch_id = db.start_batch(conn, "backfill", gha_run_url)
+        run_id = f"batch-{batch_id}"
+
+        db.upsert(conn, "issues", issues, update_cols=db.ISSUE_UPDATE_COLS)
+
+        numbers = [i["number"] for i in issues]
+        with conn.cursor() as cur:
+            cur.execute("select number from features where number = any(%s)", (numbers,))
+            have_features = {r["number"] for r in cur.fetchall()}
+
+        feature_rows = []
+        for issue in issues:
+            if issue["number"] in have_features:
+                continue
+            row = feat.compute_features(issue, 1, as_of, cfg)
+            row["cluster_id"] = issue["number"]
+            row["run_id"] = run_id
+            row["computed_at"] = as_of
+            feature_rows.append(row)
+        db.upsert(conn, "features", feature_rows)
+
+        closed_count = sum(1 for i in issues if i["state"] == "closed")
+        db.finish_batch(conn, batch_id, status="ok", issues_seen=stats.seen,
+                        closed_count=closed_count)
+
+    print(f"[closed-history] upserted {len(issues)} closed issues "
+          f"({len(feature_rows)} new feature rows). batch {batch_id}.")
+    return {"issues": len(issues), "features_added": len(feature_rows), "batch_id": batch_id}
 
 
 # ---------------------------------------------------------------------------
@@ -226,9 +296,12 @@ def run_catchup(limit: int | None = None, gha_run_url: str | None = None) -> dic
 
 def main() -> None:
     ap = argparse.ArgumentParser(prog="pipeline.backfill")
-    ap.add_argument("--mode", required=True, choices=["census", "seed-import", "catchup"])
+    ap.add_argument("--mode", required=True,
+                    choices=["census", "seed-import", "catchup", "closed-history"])
     ap.add_argument("--limit", type=int, default=None,
                     help="max issues to classify this run (catchup only; default config.catchup_per_run)")
+    ap.add_argument("--since", default=CLOSED_HISTORY_SINCE,
+                    help=f"ISO timestamp for closed-history (default {CLOSED_HISTORY_SINCE})")
     args = ap.parse_args()
 
     gha = os.environ.get("GHA_RUN_URL")
@@ -238,6 +311,8 @@ def main() -> None:
         run_seed_import()
     elif args.mode == "catchup":
         run_catchup(limit=args.limit, gha_run_url=gha)
+    elif args.mode == "closed-history":
+        run_closed_history(since=args.since, gha_run_url=gha)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,8 @@ export interface VMaster {
   triage_notes: string | null;
   triaged_by: string | null;
   is_active: boolean;
+  /** H=1, M=2, L=3, unclassified=4 — sortable priority (see db/schema.sql v1.3). */
+  priority_rank: number;
 }
 
 export interface Batch {

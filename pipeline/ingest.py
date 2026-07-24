@@ -221,6 +221,21 @@ def crawl_census(cfg: dict[str, Any], as_of: datetime, *, token: str | None = No
     yield from _crawl_since(session, url, {"state": "open"}, _EPOCH, as_of, cfg, stats, sleep)
 
 
+def crawl_closed(cfg: dict[str, Any], since: str, as_of: datetime, *, token: str | None = None,
+                 stats: IngestStats | None = None, sleep=time.sleep) -> Iterator[dict[str, Any]]:
+    """Closed-issue history crawl (state=closed, updated since `since`).
+
+    The census is `state=open` only, so issues closed before the first delta sync never
+    entered the DB — which made the dashboard's closes line read flat for those days.
+    This fills that hole. `since` filters on updated_at, and a close always bumps
+    updated_at, so `since=<date>` captures every issue closed on or after that date.
+    """
+    stats = stats if stats is not None else IngestStats()
+    session = _session(token)
+    url = f"{API_ROOT}/repos/{cfg['repo']}/issues"
+    yield from _crawl_since(session, url, {"state": "closed"}, since, as_of, cfg, stats, sleep)
+
+
 def crawl_delta(cfg: dict[str, Any], since_cursor: str, as_of: datetime, *,
                 token: str | None = None, stats: IngestStats | None = None,
                 sleep=time.sleep) -> Iterator[dict[str, Any]]:

@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useRefresh } from "@/lib/refresh";
 import { timeET } from "@/lib/format";
+import { IconMenu } from "./Icons";
 
-export function Topbar({ title }: { title: string }) {
+export function Topbar({ title, onMenu }: { title: string; onMenu: () => void }) {
   const [pill, setPill] = useState<string>("Loading sync status…");
+  const { version, syncing } = useRefresh();
 
   useEffect(() => {
     supabase
@@ -19,15 +22,18 @@ export function Topbar({ title }: { title: string }) {
         if (b) setPill(`Synced ${timeET(b.started_at)} · batch #${b.id}`);
         else setPill("No syncs yet");
       });
-  }, []);
+  }, [version]);
 
   return (
     <div className="topbar">
+      <button className="menu-btn" onClick={onMenu} aria-label="Toggle navigation">
+        <IconMenu />
+      </button>
       <span className="topbar-title">{title}</span>
       <div className="topbar-right">
         <div className="sync-pill">
-          <span className="sync-dot" />
-          {pill}
+          <span className="sync-dot" style={syncing ? undefined : { animation: "none" }} />
+          <span className="sync-pill-text">{syncing ? "Sync running…" : pill}</span>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { RefreshProvider, useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -30,12 +31,35 @@ export interface ShellCtx {
 }
 
 export function AppShell() {
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const toast = useCallback((msg: string) => {
+    setToastMsg(msg);
+    window.clearTimeout((toast as any)._h);
+    (toast as any)._h = window.setTimeout(() => setToastMsg(null), 4000);
+  }, []);
+
+  const onBatch = useCallback(
+    (b: { id: number; status: string }) =>
+      toast(b.status === "running" ? `Sync batch #${b.id} running…` : `Batch #${b.id} synced — data refreshed`),
+    [toast]
+  );
+
+  return (
+    <RefreshProvider onBatch={onBatch}>
+      <Shell toast={toast} toastMsg={toastMsg} />
+    </RefreshProvider>
+  );
+}
+
+function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: string | null }) {
   const [view, setView] = useState<ViewKey>("dash");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [drawerRow, setDrawerRow] = useState<VMaster | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [newHigh, setNewHigh] = useState<number>(0);
   const [preset, setPreset] = useState<MasterPreset>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const version = useDataVersion();
 
   useEffect(() => {
     const t = (localStorage.getItem("cc-theme") as "light" | "dark") || "light";
@@ -47,13 +71,7 @@ export function AppShell() {
       .from("v_new_high")
       .select("number", { count: "exact", head: true })
       .then(({ count }) => setNewHigh(count ?? 0));
-  }, []);
-
-  const toast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    window.clearTimeout((toast as any)._h);
-    (toast as any)._h = window.setTimeout(() => setToastMsg(null), 2600);
-  }, []);
+  }, [version]);
 
   const applyTheme = (t: "light" | "dark") => {
     setTheme(t);
@@ -65,12 +83,14 @@ export function AppShell() {
   const goMaster = useCallback((p: MasterPreset) => {
     setPreset(p);
     setView("master");
+    setNavOpen(false);
     document.querySelector("main")?.scrollTo(0, 0);
   }, []);
 
   const nav = (v: ViewKey) => {
     setView(v);
     if (v !== "master") setPreset(null);
+    setNavOpen(false);
     document.querySelector("main")?.scrollTo(0, 0);
   };
 
@@ -82,12 +102,14 @@ export function AppShell() {
         active={view}
         newHigh={newHigh}
         theme={theme}
+        open={navOpen}
         onNav={nav}
         onTheme={applyTheme}
         onSavedView={(p) => goMaster(p)}
       />
+      <div className={`nav-backdrop${navOpen ? " on" : ""}`} onClick={() => setNavOpen(false)} />
       <div className="app">
-        <Topbar title={TITLES[view]} />
+        <Topbar title={TITLES[view]} onMenu={() => setNavOpen((o) => !o)} />
         <main>
           <div className="content">
             {view === "dash" && <Dashboard ctx={ctx} />}

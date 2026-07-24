@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES } from "@/lib/types";
 import { fmtK, fmtAge, relDays } from "@/lib/format";
@@ -10,8 +11,33 @@ import { IconSearch } from "../Icons";
 import type { ShellCtx, MasterPreset } from "../AppShell";
 
 const PAGE = 50;
-const SORTS = { sc: "retrieval_score", re: "reactions_total", vel: "f_velocity", age: "age_days", cl: "cluster_size" } as const;
+
+// Sort key → (column, default direction). Priority sorts on priority_rank (H=1, M=2, L=3) so
+// it groups High → Medium → Low: ordering on the letter itself reads H, L, M, and ordering on
+// priority_score — a 0-100 LLM score — floats a strong Medium above a weak High.
+const SORTS = {
+  sc: { col: "retrieval_score", dir: -1, label: "Retrieval score" },
+  rank: { col: "final_rank_score", dir: -1, label: "Blended rank score" },
+  prio: { col: "priority_rank", dir: 1, label: "Priority" },
+  new: { col: "created_at", dir: -1, label: "Most recent" },
+  upd: { col: "updated_at", dir: -1, label: "Recently updated" },
+  re: { col: "reactions_total", dir: -1, label: "Reactions" },
+  vel: { col: "f_velocity", dir: -1, label: "Velocity" },
+  age: { col: "age_days", dir: -1, label: "Age" },
+  cl: { col: "cluster_size", dir: -1, label: "Cluster size" },
+} as const;
 type SortKey = keyof typeof SORTS;
+
+// Offered in the toolbar dropdown; the numeric column headers reach the rest.
+const SORT_MENU: SortKey[] = ["sc", "prio", "new", "upd", "rank"];
+
+// "Desc/Asc" is meaningless for a rank column where 1 is best — say what the order does.
+const dirLabel = (key: SortKey, dir: 1 | -1): string => {
+  if (key === "prio") return dir === 1 ? "High first" : "Low first";
+  if (key === "new" || key === "upd") return dir === -1 ? "Newest first" : "Oldest first";
+  if (key === "age") return dir === -1 ? "Oldest first" : "Newest first";
+  return dir === -1 ? "Highest first" : "Lowest first";
+};
 
 const TYPES = ["Bug", "Feature Request", "Question/Support", "Docs", "Other/Meta"];
 const TRIAGE = [
@@ -37,6 +63,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
   const [rows, setRows] = useState<VMaster[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const version = useDataVersion();
 
   useEffect(() => {
     setTheme(preset?.theme ?? "");
@@ -64,9 +91,12 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
         ? query.or(`number.eq.${clean},title.ilike.%${clean}%`)
         : query.ilike("title", `%${clean}%`);
     }
-    query = query
-      .order(SORTS[sort.key], { ascending: sort.dir === 1, nullsFirst: false })
-      .range(page * PAGE, page * PAGE + PAGE - 1);
+    query = query.order(SORTS[sort.key].col, { ascending: sort.dir === 1, nullsFirst: false });
+    // Priority has only four distinct values, so rank inside the band by blended score
+    // rather than letting the row-number tiebreak decide what a PM reads first.
+    if (sort.key === "prio") query = query.order("final_rank_score", { ascending: false, nullsFirst: false });
+    // Stable tiebreak so paging can't drop or repeat rows when the sort column ties.
+    query = query.order("number", { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
 
     query.then(({ data, count, error }) => {
       if (cancelled) return;
@@ -76,10 +106,13 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [q, type, theme, prio, tri, stateF, sort, page]);
+  }, [q, type, theme, prio, tri, stateF, sort, page, version]);
 
   const clickSort = (key: SortKey) =>
-    setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: -1 }));
+    setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: SORTS[key].dir }));
+
+  // The dropdown always shows the active sort, even when it was set by a column header.
+  const menuKeys = SORT_MENU.includes(sort.key) ? SORT_MENU : [...SORT_MENU, sort.key];
 
   const scopeLabel = stateF === "active" ? "active" : stateF === "closed" ? "closed · index keeps history" : "indexed (open + closed)";
   const pages = Math.ceil(total / PAGE);
@@ -122,6 +155,27 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
           <option value="closed">Closed</option>
           <option value="">All indexed</option>
         </select>
+        <div className="sort-group">
+          <select
+            className="sel"
+            value={sort.key}
+            onChange={(e) => {
+              const key = e.target.value as SortKey;
+              setSort({ key, dir: SORTS[key].dir });
+            }}
+          >
+            {menuKeys.map((k) => (
+              <option key={k} value={k}>Sort · {SORTS[k].label}</option>
+            ))}
+          </select>
+          <button
+            className="btn btn-sm"
+            title="Reverse sort direction"
+            onClick={() => setSort((s) => ({ ...s, dir: (s.dir * -1) as 1 | -1 }))}
+          >
+            ⇅ {dirLabel(sort.key, sort.dir)}
+          </button>
+        </div>
         <span className="toolbar-meta">
           {loading ? "loading…" : `${total.toLocaleString()} ${scopeLabel} · page ${page + 1}/${Math.max(1, pages)}`}
         </span>
@@ -154,7 +208,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
                   </td>
                   <td><span className="tag">{r.type ?? "—"}</span></td>
                   <td><span className="tag">{r.area ?? "—"}</span></td>
-                  <td>{r.priority ? <PriorityPill priority={r.priority} verified={r.verified_high} compact /> : <span className="tag">unclassified</span>}</td>
+                  <td>{r.priority ? <PriorityPill priority={r.priority} /> : <span className="tag">unclassified</span>}</td>
                   <td>
                     <div className="score-cell">
                       <span className="score-bar"><i style={{ width: `${Math.min(100, score)}%` }} /></span>

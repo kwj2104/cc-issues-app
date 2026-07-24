@@ -1,22 +1,12 @@
 import React from "react";
 import { priorityMeta } from "@/lib/format";
 
-export function PriorityPill({ priority, verified, compact }: { priority: string | null; verified?: boolean; compact?: boolean }) {
+// Priority only. The "✓ verified" marker that used to ride along here was removed —
+// it read as a quality badge on the issue rather than what it is (an internal
+// second-pass flag). The concept is explained once, in Batches & ops.
+export function PriorityPill({ priority }: { priority: string | null }) {
   const m = priorityMeta(priority);
-  if (compact) {
-    return (
-      <span className={`pill ${m.cls}`} title={verified ? "verified by adversarial second pass" : undefined}>
-        {m.label}
-        {verified ? " ✓" : ""}
-      </span>
-    );
-  }
-  return (
-    <>
-      <span className={`pill ${m.cls}`}>{m.label}</span>
-      {verified ? <span className="pill vrf">✓ verified</span> : null}
-    </>
-  );
+  return <span className={`pill ${m.cls}`}>{m.label}</span>;
 }
 
 export function Tag({ children, theme }: { children: React.ReactNode; theme?: boolean }) {

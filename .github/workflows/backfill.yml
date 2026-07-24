@@ -4,6 +4,10 @@ name: backfill
 #   2. seed-import  — import the adjudicated 1,000-row review log from data/seed/
 #   3. catchup      — LLM-classify the pending eligible set, ≤150 issues per invocation
 #                     (re-run until the queue is empty; scheduled sync runs also drain it)
+#   -  closed-history — repair job: the census is state=open, so issues closed before the first
+#                     delta sync never landed. Crawls state=closed since `since` (default
+#                     2026-07-11) so the dashboard's closes line is real. Already run once;
+#                     only needed again if the closes line goes flat for a past window.
 
 on:
   # Scheduled catch-up drain: 6×/day at :47 (offset from sync's :17), ~900 issues/day →
@@ -17,11 +21,15 @@ on:
         description: 'Backfill stage'
         required: true
         type: choice
-        options: [census, seed-import, catchup]
+        options: [census, seed-import, catchup, closed-history]
       limit:
         description: 'Max issues to classify this run (catchup only)'
         required: false
         default: '150'
+      since:
+        description: 'ISO date for closed-history (closed-history only)'
+        required: false
+        default: '2026-07-11T00:00:00Z'
 
 concurrency:
   group: pipeline
@@ -44,7 +52,7 @@ jobs:
       - run: npm install -g @anthropic-ai/claude-code
       - name: Run backfill stage
         # Scheduled runs supply no inputs → default to a catchup drain of 150.
-        run: python -m pipeline.backfill --mode "${{ inputs.mode || 'catchup' }}" --limit "${{ inputs.limit || '150' }}"
+        run: python -m pipeline.backfill --mode "${{ inputs.mode || 'catchup' }}" --limit "${{ inputs.limit || '150' }}" --since "${{ inputs.since || '2026-07-11T00:00:00Z' }}"
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_PAT }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

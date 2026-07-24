@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useDataVersion } from "@/lib/refresh";
 import type { Batch } from "@/lib/types";
 import { timeET } from "@/lib/format";
 
@@ -14,15 +15,18 @@ const dur = (b: Batch) => {
 export function Ops() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [state, setState] = useState<Record<string, string>>({});
+  const [vhigh, setVhigh] = useState<number | null>(null);
+  const version = useDataVersion();
 
   useEffect(() => {
     supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(20).then(({ data }) => setBatches((data as Batch[]) ?? []));
+    supabase.from("v_new_high").select("number", { count: "exact", head: true }).then(({ count }) => setVhigh(count ?? 0));
     supabase.from("sync_state").select("*").then(({ data }) => {
       const m: Record<string, string> = {};
       (data ?? []).forEach((r: any) => (m[r.key] = r.value));
       setState(m);
     });
-  }, []);
+  }, [version]);
 
   const qaArea = state.qa_area_agreement ? Math.round(parseFloat(state.qa_area_agreement) * 100) : null;
   const qaHigh = state.qa_high_share ? Math.round(parseFloat(state.qa_high_share) * 100) : null;
@@ -32,6 +36,33 @@ export function Ops() {
       <div className="view-head">
         <h1 className="display">Batches &amp; ops</h1>
         <div className="view-sub">Pipeline health, classification quality, and the full sync history. Every batch links to its GitHub Actions run.</div>
+      </div>
+
+      <div className="card card-pad explain-card">
+        <div className="explain-figure">
+          <span className="explain-value">{vhigh ?? "—"}</span>
+          <span className="explain-cap">Verified High · open</span>
+        </div>
+        <div className="explain-body">
+          <div className="card-title">What &ldquo;Verified High&rdquo; means</div>
+          <p>
+            Every issue gets a priority from the classifier. Anything it calls <b>High</b> then has to
+            survive a <b>second, adversarial pass</b>: a fresh model run is handed the issue plus hard
+            numbers — how much engagement it has drawn compared with issues of the same age, how many
+            near-duplicate reports exist, how long since anyone touched it, and whether the newest
+            release already shipped a fix — and is asked to argue the rating <i>down</i>.
+          </p>
+          <p>
+            It throws out cosmetic complaints, anything with a workable workaround, and anything
+            already stale against the current release. It keeps issues it cannot talk down. A serious
+            enough class of problem — data loss, security, consent failures, billing — can pass on a
+            single report, but only when that report carries a concrete mechanism and a reproduction.
+          </p>
+          <p className="explain-foot">
+            So the count above is <b>&ldquo;how many open issues survived being argued against&rdquo;</b> — a
+            read-first queue, not a severity score. The full list lives in <b>New &amp; Notable</b>.
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-kpi">
@@ -62,7 +93,7 @@ export function Ops() {
 
       <div className="grid grid-2a">
         <div className="card card-pad">
-          <div className="card-head"><div><div className="card-title">Sync history</div><div className="card-sub">Most recent 20 batches · times ET</div></div></div>
+          <div className="card-head"><div><div className="card-title">Latest batches</div><div className="card-sub">Most recent 20 syncs · times ET · every batch links to its Actions run</div></div></div>
           <div style={{ overflowX: "auto" }}>
             <table className="chart-table ops-table">
               <thead><tr><th>Batch</th><th>Kind</th><th>Time</th><th>Duration</th><th>New</th><th>Classified</th><th>New High</th><th>Status</th><th></th></tr></thead>

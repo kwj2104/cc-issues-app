@@ -59,12 +59,11 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
             </div>
             <div className="drawer-title">{row.title}</div>
             <div className="badge-row">
-              {row.priority ? <PriorityPill priority={row.priority} verified={row.verified_high} /> : <span className="tag">unclassified</span>}
+              {row.priority ? <PriorityPill priority={row.priority} /> : <span className="tag">unclassified</span>}
               {closed && <span className="pill ok">Closed · {row.state_reason ?? "closed"}</span>}
               {row.type && <span className="tag">{row.type}</span>}
               {row.area && <span className="tag">{row.area}</span>}
               {row.theme && <span className="tag theme-t">{THEME_NAMES[row.theme] ?? row.theme}</span>}
-              {row.verify_basis && <span className="tag">{row.verify_basis === "class-solo" ? "solo report" : row.verify_basis}</span>}
             </div>
           </div>
 
@@ -86,7 +85,7 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
                   <span>Classifier confidence</span>
                   <div className="meter" style={{ maxWidth: 150 }}><i style={{ width: `${Math.round((row.confidence ?? 0) * 100)}%` }} /></div>
                   <b style={{ color: "var(--text-2)" }}>{Math.round((row.confidence ?? 0) * 100)}%</b>
-                  <span style={{ marginLeft: "auto" }}>{row.verified_high ? "verified · adversarial pass ✓" : "single-pass classification"}</span>
+                  <span style={{ marginLeft: "auto" }}>{row.verified_high ? "rating held up under a second, challenging pass" : "single-pass rating"}</span>
                 </div>
               </div>
             )}
@@ -111,7 +110,7 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
                 <div className="sig"><b>{(row.f_velocity ?? 0).toFixed(1)}</b><span>velocity term</span></div>
                 <div className="sig"><b>{fmtAge(row.age_days)}</b><span>age</span></div>
                 <div className="sig"><b>{(row.cluster_size ?? 1) > 1 ? "×" + row.cluster_size : "1"}</b><span>cluster size</span></div>
-                <div className="sig"><b>{closed ? "closed" : row.verified_high ? "confirmed" : "active"}</b><span>{closed ? row.state_reason ?? "closed" : "status"}</span></div>
+                <div className="sig"><b>{closed ? "closed" : "active"}</b><span>{closed ? row.state_reason ?? "closed" : "status"}</span></div>
               </div>
             </div>
 

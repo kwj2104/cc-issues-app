@@ -1,4 +1,9 @@
--- Claude Code Issue Tracker — Supabase schema (v1.2)
+-- Claude Code Issue Tracker — Supabase schema (v1.3)
+-- Migrations: v1.3 (2026-07-24) adds v_master.priority_rank (H=1, M=2, L=3, unclassified=4) so the
+--   web master list can sort High→Medium→Low. PostgREST can only order by a column, and ordering on
+--   the letter itself reads H, L, M; priority_score is a 0-100 LLM score, so sorting by it
+--   interleaves a high-scoring Medium above a low-scoring High. View-only change — re-run this file
+--   (or just the v_master/v_new_high `create or replace view` block) to apply; no data migration.
 -- Migrations: v1.2 (2026-07-23) adds analysis.verify_basis ('corroborated'|'class-solo'|null),
 --   distinguishing verify confirms backed by breadth/corroboration from solo class-based confirms,
 --   plus verify_{reactions,cluster_size,band_decile} — the evidence snapshot at verify time that the
@@ -131,7 +136,9 @@ select
   a.summary, a.rationale, a.confidence, a.verified_high, a.verify_basis,
   a.verification_status, a.source as analysis_source, a.model, a.rubric_version, a.batch_id,
   t.status as triage_status, t.assignee, t.notes as triage_notes, t.updated_by as triaged_by,
-  (i.state = 'open' and coalesce(f.eligible, true)) as is_active
+  (i.state = 'open' and coalesce(f.eligible, true)) as is_active,
+  -- Sortable priority: ascending gives High → Medium → Low → unclassified.
+  case a.priority when 'H' then 1 when 'M' then 2 when 'L' then 3 else 4 end as priority_rank
 from issues i
 left join features f using (number)
 left join analysis a using (number)

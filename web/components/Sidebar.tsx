@@ -20,17 +20,18 @@ const SAVED: { label: string; dot: string; preset: MasterPreset }[] = [
 ];
 
 export function Sidebar({
-  active, newHigh, theme, onNav, onTheme, onSavedView,
+  active, newHigh, theme, open, onNav, onTheme, onSavedView,
 }: {
   active: ViewKey;
   newHigh: number;
   theme: "light" | "dark";
+  open: boolean;
   onNav: (v: ViewKey) => void;
   onTheme: (t: "light" | "dark") => void;
   onSavedView: (p: MasterPreset) => void;
 }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? " open" : ""}`}>
       <div className="logo-row">
         <Starburst className="logo-mark" />
         <span className="logo-name">Claude Code</span>
@@ -64,7 +65,7 @@ export function Sidebar({
           <div className="avatar">K</div>
           <div>
             <div className="user-name">Kevin</div>
-            <div className="user-plan">Product Ops · Max</div>
+            <div className="user-plan">Product Ops</div>
           </div>
         </div>
       </div>
