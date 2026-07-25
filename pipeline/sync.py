@@ -15,6 +15,7 @@ maintainer relabel bumps the issue's updated_at, so it re-enters via the ordinar
 from __future__ import annotations
 
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -80,6 +81,27 @@ def _classify_queue(conn, delta_numbers: list[int]) -> list[int]:
             (delta_numbers,),
         )
         return [r["number"] for r in cur.fetchall()]
+
+
+def _prioritize(conn, numbers: set[int], cap: int | None) -> list[int]:
+    """Order the classify queue by retrieval_score desc and cap it at `cap`.
+
+    A sync used to classify its entire delta, which is fine at ~30 issues/run and fatal once a
+    stalled cursor lets the delta reach four figures. Capping keeps a run inside the job timeout
+    and the subscription budget; ordering by retrieval_score means the cap sheds the least
+    valuable rows, and the remainder is exactly what catchup already drains.
+    """
+    if not numbers:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            """select i.number from issues i left join features f using (number)
+               where i.number = any(%s)
+               order by f.retrieval_score desc nulls last, i.number desc""",
+            (list(numbers),),
+        )
+        ordered = [r["number"] for r in cur.fetchall()]
+    return ordered[:cap] if cap else ordered
 
 
 def _provisional_features(conn, delta: list[dict[str, Any]], as_of: datetime,
@@ -185,13 +207,47 @@ def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
     Returns (classified_count, verified_high_count).
     """
     batch_size = cfg["classifier"]["batch_size"]
-    classified = new_high = 0
+    max_consecutive = cfg["classifier"].get("max_consecutive_failures", 3)
+    budget_s = cfg["classifier"].get("classify_budget_s")
+    deadline = (time.monotonic() + budget_s) if budget_s else None
+    classified = new_high = skipped = 0
+    consecutive = 0
+
     for start in range(0, len(queue), batch_size):
+        # Hard stop before the job timeout can kill us mid-transaction: a killed run commits
+        # nothing, which is how a slow classify phase silently discarded a whole ingest.
+        if deadline and time.monotonic() > deadline:
+            remaining = len(queue) - start
+            skipped += remaining
+            print(f"[{tag}] classify time budget ({budget_s}s) exhausted — committing now, "
+                  f"{remaining} left pending")
+            break
         chunk = queue[start : start + batch_size]
         digests = classify.digests_for(conn, chunk)
         dmap = {d["number"]: d for d in digests}
         blend_in = _blend_inputs(conn, chunk)
-        classifications, _ = classify.classify_batch(digests, cfg)
+
+        # Classification is BEST-EFFORT: a classifier error (usage limit, CLI hiccup) must not
+        # abort the run. The ingest, features and cursor advance in this same transaction are
+        # the valuable part, and rolling those back is what turned one rate-limited run into a
+        # spiral — the next run re-pulled a bigger delta and failed the same way. Anything not
+        # classified here has no analysis row, so catchup (and the next sync's updated-since
+        # rule) picks it up for free.
+        try:
+            classifications, _ = classify.classify_batch(digests, cfg)
+        except Exception as exc:
+            consecutive += 1
+            skipped += len(chunk)
+            print(f"[{tag}] classify batch failed ({type(exc).__name__}: {exc}); "
+                  f"skipping {len(chunk)} — the next run absorbs them")
+            if consecutive >= max_consecutive:
+                remaining = len(queue) - (start + len(chunk))
+                skipped += remaining
+                print(f"[{tag}] {consecutive} consecutive classifier failures — stopping "
+                      f"classification for this run, {remaining} left pending")
+                break
+            continue
+        consecutive = 0
 
         rows = []
         for cls in classifications:
@@ -203,7 +259,15 @@ def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
             ev = None
             if verify.needs_verification(cls, cfg):
                 ev = ctx.enrich(num)
-                verdict, _ = verify.verify_one(digest, cls, cfg, evidence=ev)
+                try:
+                    verdict, _ = verify.verify_one(digest, cls, cfg, evidence=ev)
+                except Exception as exc:
+                    # Writing the row unverified would strand it: nothing re-queues an issue
+                    # whose analysis exists and whose updated_at hasn't moved. Leave it with no
+                    # analysis row so it stays pending and gets a full classify+verify later.
+                    skipped += 1
+                    print(f"[{tag}] verify failed for #{num} ({type(exc).__name__}); left pending")
+                    continue
                 # snapshot for the re-verify triggers (after verify, so it stays out of the prompt)
                 ev["_reactions"] = ctx.reactions.get(num)
                 ev["_band_decile"] = ctx.band_decile(num)
@@ -216,6 +280,9 @@ def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
         db.upsert(conn, "analysis", rows)
         classified += len(rows)
         print(f"[{tag}] classified {classified}/{len(queue)} (verified_high {new_high})")
+
+    if skipped:
+        print(f"[{tag}] {skipped} left unclassified this run — catchup will drain them")
     return classified, new_high
 
 
@@ -263,9 +330,13 @@ def run_sync(gha_run_url: str | None = None) -> dict[str, Any]:
         ctx = evidence.EvidenceContext(conn, cfg)
         queue = _classify_queue(conn, delta_numbers)
         reverify = _reverify_candidates(conn, ctx)
-        queue = sorted(set(queue) | set(reverify))
+        pending = set(queue) | set(reverify)
+        cap = cfg["classifier"].get("sync_per_run")
+        queue = _prioritize(conn, pending, cap)
+        deferred = len(pending) - len(queue)
         print(f"[sync] delta={len(delta)} (new {new_count}, upd {updated_count}, closed {closed_count}); "
-              f"classify queue={len(queue)} (+{len(reverify)} re-verify)")
+              f"classify queue={len(queue)} of {len(pending)} eligible (+{len(reverify)} re-verify)"
+              + (f"; {deferred} deferred to catchup" if deferred else ""))
 
         norms = blend.population_norms(conn)
         classified, new_high = process_queue(conn, queue, cfg, batch_id, ctx, norms,

@@ -16,7 +16,10 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Headroom for a catch-up run: after an outage the delta crawl alone can take ~7 min. The
+    # classify phase is bounded by classifier.classify_budget_s, so a normal run is still ~4 min;
+    # this ceiling only exists so a big delta commits instead of being killed mid-transaction.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
