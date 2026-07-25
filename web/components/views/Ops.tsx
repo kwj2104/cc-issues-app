@@ -16,10 +16,16 @@ export function Ops() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [state, setState] = useState<Record<string, string>>({});
   const [vhigh, setVhigh] = useState<number | null>(null);
+  const [lastPull, setLastPull] = useState<Batch | null>(null);
   const version = useDataVersion();
 
   useEffect(() => {
     supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(20).then(({ data }) => setBatches((data as Batch[]) ?? []));
+    // The delta sync is the only thing that pulls from GitHub; backfill/recluster batches
+    // rework what we already have. Tracked separately so a run of catchup batches can't make
+    // the data look fresher upstream than it is.
+    supabase.from("batches").select("*").eq("kind", "interval").order("started_at", { ascending: false }).limit(1)
+      .then(({ data }) => setLastPull(((data ?? [])[0] as Batch) ?? null));
     supabase.from("v_new_high").select("number", { count: "exact", head: true }).then(({ count }) => setVhigh(count ?? 0));
     supabase.from("sync_state").select("*").then(({ data }) => {
       const m: Record<string, string> = {};
@@ -27,6 +33,10 @@ export function Ops() {
       setState(m);
     });
   }, [version]);
+
+  // The delta sync is scheduled every 2h; flag it once it has missed a few windows.
+  const pullAgeH = lastPull ? Math.floor((Date.now() - new Date(lastPull.started_at).getTime()) / 3600000) : 0;
+  const pullStale = !!lastPull && pullAgeH >= 6;
 
   const qaArea = state.qa_area_agreement ? Math.round(parseFloat(state.qa_area_agreement) * 100) : null;
   const qaHigh = state.qa_high_share ? Math.round(parseFloat(state.qa_high_share) * 100) : null;
@@ -117,6 +127,13 @@ export function Ops() {
         </div>
         <div className="card card-pad">
           <div className="card-head"><div><div className="card-title">Pipeline config</div><div className="card-sub">Current state</div></div></div>
+          <div className="kv">
+            <span>Last GitHub pull</span>
+            <b className={pullStale ? "run-warn" : undefined}>
+              {lastPull ? `${timeET(lastPull.started_at)} · batch #${lastPull.id}` : "—"}
+              {pullStale ? ` · ${pullAgeH}h ago` : ""}
+            </b>
+          </div>
           <div className="kv"><span>Cursor (updated_at)</span><b className="mono" style={{ fontSize: 11 }}>{state.since_cursor?.slice(0, 19) ?? "—"}</b></div>
           <div className="kv"><span>Cadence</span><b>every 2h · GH Actions</b></div>
           <div className="kv"><span>Classifier</span><b>Sonnet · headless</b></div>

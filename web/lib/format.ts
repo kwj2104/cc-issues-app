@@ -28,6 +28,13 @@ export const priorityMeta = (p: string | null): { cls: string; label: string } =
   return m[p ?? ""] ?? { cls: "low", label: "—" };
 };
 
+// batches.kind → what a reader should call it. Every kind writes data the app displays
+// (a catchup backfill lands analysis rows), so all of them count as "the data changed".
+export const batchKind = (kind: string | null): string =>
+  ({ interval: "delta sync", recluster: "nightly recluster", backfill: "backfill", seed: "seed import" }[kind ?? ""] ??
+    kind ??
+    "batch");
+
 export const timeET = (iso: string | null): string => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("en-US", {

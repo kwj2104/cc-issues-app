@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import { THEME_NAMES } from "@/lib/types";
-import { timeET } from "@/lib/format";
+import { batchKind, timeET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
 import { Starburst } from "../Icons";
 
@@ -33,7 +33,8 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       // High severity, near-zero engagement — the class the engagement-weighted ranking buries.
       setQuiet(await count((q) => q.eq("is_active", true).eq("priority", "H").lt("reactions_total", 10)));
 
-      const { data: b } = await supabase.from("batches").select("*").in("kind", ["interval", "recluster"]).order("started_at", { ascending: false }).limit(1);
+      // Any kind — a catchup backfill changes classifications, so it is a data update too.
+      const { data: b } = await supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(1);
       setBatch(b ?? []);
 
       const [H, M, L] = await Promise.all([
@@ -88,9 +89,11 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         <Tile label="New issues (24h)" value={kpi.new24.toLocaleString()} sub="created in the last day" />
         <Tile label="Closed (24h)" value={kpi.closed24.toLocaleString()} sub="closed in the last day" />
         <Tile
-          label="Last sync"
+          label="Last update"
           value={batch?.[0] ? timeET(batch[0].started_at) : "—"}
-          ok={batch?.[0] ? `batch #${batch[0].id} · ${batch[0].status}` : undefined}
+          ok={batch?.[0]
+            ? `batch #${batch[0].id} · ${batchKind(batch[0].kind)}${batch[0].status === "ok" ? "" : " · " + batch[0].status}`
+            : undefined}
         />
       </div>
 
