@@ -12,6 +12,12 @@ import type { ShellCtx, MasterPreset } from "../AppShell";
 
 const PAGE = 50;
 
+// Quiet severe: high-severity issues almost nobody has reacted to. The default sort is
+// engagement-weighted by design, which is exactly what buries the silent data-loss / consent /
+// billing class — this predicate is the counterweight that keeps them reachable. It does not
+// change the ranking, it just filters to the rows the ranking hides.
+const QUIET_MAX_REACTIONS = 10; // "near-zero" — tune against real data
+
 // Sort key → (column, default direction). Priority sorts on priority_rank (H=1, M=2, L=3) so
 // it groups High → Medium → Low: ordering on the letter itself reads H, L, M, and ordering on
 // priority_score — a 0-100 LLM score — floats a strong Medium above a weak High.
@@ -58,6 +64,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
   const [prio, setPrio] = useState(preset?.priority ?? "");
   const [tri, setTri] = useState("");
   const [stateF, setStateF] = useState("active");
+  const [quiet, setQuiet] = useState(!!preset?.quiet);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "sc", dir: -1 });
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<VMaster[]>([]);
@@ -68,11 +75,12 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
   useEffect(() => {
     setTheme(preset?.theme ?? "");
     setPrio(preset?.priority ?? "");
+    setQuiet(!!preset?.quiet);
     setPage(0);
   }, [preset]);
 
   // reset to first page whenever a filter/sort changes
-  useEffect(() => setPage(0), [q, type, theme, prio, tri, stateF, sort]);
+  useEffect(() => setPage(0), [q, type, theme, prio, tri, stateF, quiet, sort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +89,10 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
 
     if (stateF === "active") query = query.eq("is_active", true);
     else if (stateF === "closed") query = query.eq("state", "closed");
+    // Quiet severe is an extra predicate only — it never touches the sort.
+    if (quiet) {
+      query = query.eq("is_active", true).eq("priority", "H").lt("reactions_total", QUIET_MAX_REACTIONS);
+    }
     if (type) query = query.eq("type", type);
     if (theme) query = query.eq("theme", theme);
     if (prio) query = query.eq("priority", prio);
@@ -106,7 +118,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [q, type, theme, prio, tri, stateF, sort, page, version]);
+  }, [q, type, theme, prio, tri, stateF, quiet, sort, page, version]);
 
   const clickSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: SORTS[key].dir }));
@@ -114,7 +126,9 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
   // The dropdown always shows the active sort, even when it was set by a column header.
   const menuKeys = SORT_MENU.includes(sort.key) ? SORT_MENU : [...SORT_MENU, sort.key];
 
-  const scopeLabel = stateF === "active" ? "active" : stateF === "closed" ? "closed · index keeps history" : "indexed (open + closed)";
+  const scopeLabel = quiet
+    ? `quiet-severe · High + <${QUIET_MAX_REACTIONS} 👍`
+    : stateF === "active" ? "active" : stateF === "closed" ? "closed · index keeps history" : "indexed (open + closed)";
   const pages = Math.ceil(total / PAGE);
 
   const arr = (key: SortKey) => (sort.key === key ? (sort.dir === -1 ? " ▼" : " ▲") : "");
@@ -146,6 +160,14 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
           <option value="">Priority · all</option>
           <option value="H">High</option><option value="M">Medium</option><option value="L">Low</option>
         </select>
+        <button
+          className={`chip-toggle${quiet ? " on" : ""}`}
+          aria-pressed={quiet}
+          title={`High priority with fewer than ${QUIET_MAX_REACTIONS} reactions — severe issues the engagement-weighted ranking buries`}
+          onClick={() => setQuiet((v) => !v)}
+        >
+          ◇ Quiet severe
+        </button>
         <select className="sel" value={tri} onChange={(e) => setTri(e.target.value)}>
           <option value="">Triage · all</option>
           {TRIAGE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

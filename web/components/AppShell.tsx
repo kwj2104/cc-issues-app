@@ -14,7 +14,7 @@ import { Themes } from "./views/Themes";
 import { Ops } from "./views/Ops";
 
 export type ViewKey = "dash" | "notable" | "master" | "themes" | "ops";
-export type MasterPreset = { priority?: string; theme?: string } | null;
+export type MasterPreset = { priority?: string; theme?: string; quiet?: boolean } | null;
 
 const TITLES: Record<ViewKey, string> = {
   dash: "Dashboard",

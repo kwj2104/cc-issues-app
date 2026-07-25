@@ -17,6 +17,50 @@ const comps = (r: VMaster) => [
   ["Cluster mass", Math.min(100, Math.round((Math.log2(Math.max(1, r.cluster_size ?? 1)) / Math.log2(140)) * 100)), 0.1],
 ] as const;
 
+// Basis-keyed copy, not a per-issue string: the schema has no verify_reason column yet, so
+// anything issue-specific here would be invented.
+const VERIFY_COPY: Record<string, { pill: string; cls: string; text: string }> = {
+  corroborated: {
+    pill: "✓ corroborated",
+    cls: "corr",
+    text: "Confirmed and corroborated by breadth — a duplicate cluster and/or top age-band engagement back the rating.",
+  },
+  "class-solo": {
+    pill: "◇ lead · solo",
+    cls: "lead",
+    text:
+      "Confirmed on a single credible report of a data-loss / security / consent / billing defect with a " +
+      "concrete mechanism. This lane is deliberately permissive — a wrong confirm costs a glance; a missed " +
+      "silent-data-loss bug costs weeks — and its precision is policed by the weekly QA sample.",
+  },
+};
+
+function Verification({ row }: { row: VMaster }) {
+  const basis = row.verify_basis && VERIFY_COPY[row.verify_basis] ? VERIFY_COPY[row.verify_basis] : null;
+
+  return (
+    <div className="d-sec">
+      <div className="d-label">Verification</div>
+      {row.verified_high && basis ? (
+        <div className={`verify-box ${row.verify_basis}`}>
+          <span className={`pill ${basis.cls}`}>{basis.pill}</span>
+          <div className="verify-reason">{basis.text}</div>
+        </div>
+      ) : row.verified_high ? (
+        <div className="verify-reason" style={{ marginTop: 0 }}>
+          Rating held up under a second, challenging pass. This row predates the basis being recorded, so
+          which lane confirmed it isn’t stored.
+        </div>
+      ) : (
+        <div className="verify-reason" style={{ marginTop: 0 }}>
+          Single-pass rating — re-verifies automatically if its cluster grows or engagement crosses the
+          next age-band decile.
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TRIAGE_LABEL: Record<string, string> = {
   untriaged: "Untriaged", acknowledged: "Acknowledged", investigating: "Investigating",
   escalated: "Escalated", resolved: "Resolved", wontfix: "Won’t fix",
@@ -85,10 +129,12 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
                   <span>Classifier confidence</span>
                   <div className="meter" style={{ maxWidth: 150 }}><i style={{ width: `${Math.round((row.confidence ?? 0) * 100)}%` }} /></div>
                   <b style={{ color: "var(--text-2)" }}>{Math.round((row.confidence ?? 0) * 100)}%</b>
-                  <span style={{ marginLeft: "auto" }}>{row.verified_high ? "rating held up under a second, challenging pass" : "single-pass rating"}</span>
                 </div>
               </div>
             )}
+
+            <Verification row={row} />
+
 
             <div className="d-sec">
               <div className="d-label">Score decomposition · rank {score}</div>

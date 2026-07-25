@@ -15,6 +15,7 @@ async function count(build: (q: any) => any): Promise<number> {
 
 export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
+  const [quiet, setQuiet] = useState(0);
   const [batch, setBatch] = useState<any>(null);
   const version = useDataVersion();
   const [prio, setPrio] = useState<{ H: number; M: number; L: number }>({ H: 0, M: 0, L: 0 });
@@ -28,6 +29,9 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       const { count: new24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("created_at", since);
       const { count: closed24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("closed_at", since);
       setKpi({ active, new24: new24 ?? 0, closed24: closed24 ?? 0 });
+
+      // High severity, near-zero engagement — the class the engagement-weighted ranking buries.
+      setQuiet(await count((q) => q.eq("is_active", true).eq("priority", "H").lt("reactions_total", 10)));
 
       const { data: b } = await supabase.from("batches").select("*").in("kind", ["interval", "recluster"]).order("started_at", { ascending: false }).limit(1);
       setBatch(b ?? []);
@@ -44,14 +48,16 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       );
       setThemes(themeCounts.sort((a, b) => b[1] - a[1]));
 
-      // 14-day intake vs closes (per-day count queries)
+      // 14 complete UTC days, ending yesterday. The current day is deliberately excluded: it is
+      // always partial, and in the hours right after UTC midnight it is ~empty, which drew a
+      // cliff to zero that read as "intake collapsed". Today's numbers are the 24h KPI tiles.
       const days: string[] = [], opened: number[] = [], closed: number[] = [];
       const dayStart = (d: Date) => { const x = new Date(d); x.setUTCHours(0, 0, 0, 0); return x; };
       const jobs: PromiseLike<void>[] = [];
-      for (let i = 13; i >= 0; i--) {
+      for (let i = 14; i >= 1; i--) {
         const d0 = dayStart(new Date(Date.now() - i * 86400000));
         const d1 = new Date(d0.getTime() + 86400000);
-        const idx = 13 - i;
+        const idx = 14 - i; // i=14 → 0 (oldest) … i=1 → 13 (yesterday)
         days[idx] = d0.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
         jobs.push(
           supabase.from("issues").select("number", { count: "exact", head: true }).gte("created_at", d0.toISOString()).lt("created_at", d1.toISOString()).then(({ count }) => { opened[idx] = count ?? 0; }),
@@ -88,9 +94,29 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         />
       </div>
 
+      <div
+        className="card quiet-callout"
+        role="button"
+        tabIndex={0}
+        onClick={() => ctx.goMaster({ quiet: true })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ctx.goMaster({ quiet: true }); }
+        }}
+      >
+        <span className="qc-mark" aria-hidden>◇</span>
+        <div>
+          <div className="qc-head"><b>{quiet.toLocaleString()}</b> high-severity issues with near-zero engagement</div>
+          <div className="qc-sub">
+            Impact and votes are only loosely related here — these are the silent data-loss, consent, and
+            billing defects an engagement-ranked list buries.{" "}
+            <span className="qc-link">Open the Quiet Severe view →</span>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-2a">
         <div className="card card-pad">
-          <div className="card-head"><div><div className="card-title">Intake vs. closes</div><div className="card-sub">Issues opened and closed per day · last 14 days · today is partial</div></div></div>
+          <div className="card-head"><div><div className="card-title">Intake vs. closes</div><div className="card-sub">Issues opened and closed per day · last 14 complete days (UTC)</div></div></div>
           <IntakeChart {...trend} />
         </div>
         <div className="card card-pad">

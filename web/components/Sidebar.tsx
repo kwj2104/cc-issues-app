@@ -14,6 +14,7 @@ const NAV: { key: ViewKey; label: string; Icon: (p: any) => JSX.Element }[] = [
 ];
 
 const SAVED: { label: string; dot: string; preset: MasterPreset }[] = [
+  { label: "Quiet severe", dot: "var(--accent)", preset: { quiet: true } },
   { label: "Verified High · open", dot: "var(--hi-mark)", preset: { priority: "H" } },
   { label: "Regressions this week", dot: "var(--med-mark)", preset: { theme: "change-velocity-rollout" } },
   { label: "Money correctness", dot: "var(--s2)", preset: { theme: "money-correctness" } },
