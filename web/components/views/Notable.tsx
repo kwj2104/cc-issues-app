@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES } from "@/lib/types";
-import { fmtAge, timeET } from "@/lib/format";
+import { relDays, timeET } from "@/lib/format";
 import { PriorityPill } from "../ui";
 import type { ShellCtx } from "../AppShell";
 
@@ -32,9 +32,21 @@ const LANES = [
 // fabricated per-issue string.
 const SOLO_NOTE = "Single credible report — kept because for this class corroboration often never arrives.";
 
+// Batches group by *when the classifier first looked at an issue*, not by when the issue was
+// filed — so an issue opened months ago lands in today's batch. Why it landed there depends on
+// the batch kind, and that is the difference between "this changed today" and "we finally got
+// to it", so the header says which.
+const BATCH_KIND_NOTE: Record<string, string> = {
+  interval: "changed since the last sync",
+  backfill: "backlog catch-up — classified for the first time",
+  recluster: "nightly recluster",
+  seed: "seed review import",
+};
+
 export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) => void }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [kinds, setKinds] = useState<Record<number, string>>({});
   const version = useDataVersion();
 
   useEffect(() => {
@@ -43,6 +55,10 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
       setLoading(false);
       onCount((data ?? []).length);
     });
+    // v_new_high carries the batch's start time but not its kind; fetch it so each group can
+    // say why its issues are there.
+    supabase.from("batches").select("id, kind").order("id", { ascending: false }).limit(80)
+      .then(({ data }) => setKinds(Object.fromEntries((data ?? []).map((b: any) => [b.id, b.kind]))));
   }, [onCount, version]);
 
   const groups = Array.from(new Set(rows.map((r) => r.batch_id)));
@@ -56,10 +72,12 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
       <div className="view-head">
         <h1 className="display">New &amp; Notable</h1>
         <div className="view-sub">
-          High-priority issues whose rating <b>held up under a second, challenging pass</b>, grouped by sync
-          batch and split into two lanes: <b>corroborated</b> (breadth backs it — escalate) and{" "}
-          <b>leads</b> (one credible report of a severe class — investigate first). The check itself is
-          explained in <b>Batches &amp; ops</b>.
+          High-priority issues whose rating <b>held up under a second, challenging pass</b>, split into two
+          lanes: <b>corroborated</b> (breadth backs it — escalate) and <b>leads</b> (one credible report of a
+          severe class — investigate first). The check itself is explained in <b>Batches &amp; ops</b>.
+          <br />
+          Grouped by the batch that <b>classified</b> it, which is not when it was filed — a catch-up batch
+          works through the unclassified backlog, so its issues can be months old.
         </div>
       </div>
       <div className="toolbar">
@@ -93,6 +111,7 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
             <div className="batch-head">
               <b>Batch #{bid}</b>
               <span>{timeET(items[0].batch_started_at)}</span>
+              {kinds[bid as number] && <span>· {BATCH_KIND_NOTE[kinds[bid as number]] ?? kinds[bid as number]}</span>}
               <span className="rule" />
               <span>
                 {placed === 0
@@ -136,7 +155,11 @@ function NotableCard({ row: i, ctx, note }: { row: Row; ctx: ShellCtx; note: str
           {i.theme && <span className="tag theme-t">{THEME_NAMES[i.theme] ?? i.theme}</span>}
           {i.area && <span className="tag">{i.area}</span>}
           <span>{(i.cluster_size ?? 1) > 1 ? `cluster ×${i.cluster_size}` : "singleton"}</span>
-          <span>{fmtAge(i.age_days)} ago</span>
+          {/* Both off created_at/updated_at and the live clock. age_days is a stored feature
+              recomputed nightly, so pairing it with a live relDays() drew "opened 29d ago ·
+              updated 30d ago" — an issue updated before it was filed. */}
+          <span>opened {relDays(i.created_at)} ago</span>
+          <span>updated {relDays(i.updated_at)} ago</span>
         </div>
         {note && <div className="nn-vr">{note}</div>}
       </div>
