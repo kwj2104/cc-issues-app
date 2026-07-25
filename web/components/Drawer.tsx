@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { VMaster } from "@/lib/types";
-import { THEME_NAMES } from "@/lib/types";
+import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { fmtK, fmtAge, relDays } from "@/lib/format";
 import { PriorityPill } from "./ui";
 import { IconClose, IconExternal } from "./Icons";
@@ -107,7 +107,7 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
               {closed && <span className="pill ok">Closed · {row.state_reason ?? "closed"}</span>}
               {row.type && <span className="tag">{row.type}</span>}
               {row.area && <span className="tag">{row.area}</span>}
-              {row.theme && <span className="tag theme-t">{THEME_NAMES[row.theme] ?? row.theme}</span>}
+              {row.theme && <span className="tag theme-t">{themeLabel(row.theme)}</span>}
             </div>
           </div>
 

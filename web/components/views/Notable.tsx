@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
-import { THEME_NAMES } from "@/lib/types";
+import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { relDays, timeET } from "@/lib/format";
 import { PriorityPill } from "../ui";
 import type { ShellCtx } from "../AppShell";
@@ -152,7 +152,7 @@ function NotableCard({ row: i, ctx, note }: { row: Row; ctx: ShellCtx; note: str
         <div className="nn-title">{i.title}</div>
         <div className="nn-meta">
           <span className="t-num mono">#{i.number}</span>
-          {i.theme && <span className="tag theme-t">{THEME_NAMES[i.theme] ?? i.theme}</span>}
+          {i.theme && <span className="tag theme-t">{themeLabel(i.theme)}</span>}
           {i.area && <span className="tag">{i.area}</span>}
           <span>{(i.cluster_size ?? 1) > 1 ? `cluster ×${i.cluster_size}` : "singleton"}</span>
           {/* Both off created_at/updated_at and the live clock. age_days is a stored feature

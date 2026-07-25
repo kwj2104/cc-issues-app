@@ -70,6 +70,16 @@ export interface Batch {
   gha_run_url: string | null;
 }
 
+// Display label for a theme. The classifier's enum (frozen, output_schema.json) includes
+// the literal "none" for issues that fit none of the seven themes — that is a real verdict,
+// but "none" renders like missing data, so show it as "Other". Kept out of THEME_NAMES
+// because that map also *enumerates* the seven themes for the Themes view and theme bars.
+export const themeLabel = (theme: string | null | undefined): string | null => {
+  if (!theme) return null;
+  if (theme === "none") return "Other";
+  return THEME_NAMES[theme] ?? theme;
+};
+
 // The 7 established themes (slug → display name), matching the classifier's theme enum.
 export const THEME_NAMES: Record<string, string> = {
   "work-session-integrity": "Work & session integrity",

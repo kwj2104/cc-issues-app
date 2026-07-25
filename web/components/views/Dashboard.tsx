@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
-import { THEME_NAMES } from "@/lib/types";
-import { batchKind, timeET } from "@/lib/format";
+import type { VMaster } from "@/lib/types";
+import { THEME_NAMES, themeLabel } from "@/lib/types";
+import { fmtK, timeET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
 import { Starburst } from "../Icons";
+
+// Mirrors pipeline/config.yaml → eligibility.exclude_labels. An issue can carry more than
+// one, so these counts overlap and deliberately are not presented as a sum.
+const EXCLUDE_LABELS = ["stale", "duplicate", "invalid", "question", "autoclose"];
 
 async function count(build: (q: any) => any): Promise<number> {
   const { count } = await build(supabase.from("v_master").select("number", { count: "exact", head: true }));
@@ -15,7 +20,9 @@ async function count(build: (q: any) => any): Promise<number> {
 
 export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
-  const [quiet, setQuiet] = useState(0);
+  const [tally, setTally] = useState<{ open: number; filtered: number; reasons: [string, number][] } | null>(null);
+  const [todayHigh, setTodayHigh] = useState<VMaster[]>([]);
+  const [todayCoverage, setTodayCoverage] = useState<{ opened: number; classified: number } | null>(null);
   const [batch, setBatch] = useState<any>(null);
   const version = useDataVersion();
   const [prio, setPrio] = useState<{ H: number; M: number; L: number }>({ H: 0, M: 0, L: 0 });
@@ -30,8 +37,37 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       const { count: closed24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("closed_at", since);
       setKpi({ active, new24: new24 ?? 0, closed24: closed24 ?? 0 });
 
-      // High severity, near-zero engagement — the class the engagement-weighted ranking buries.
-      setQuiet(await count((q) => q.eq("is_active", true).eq("priority", "H").lt("reactions_total", 10)));
+      // Today's new High-priority arrivals. `todayStart` is UTC midnight so it matches the
+      // intake chart's day buckets; the header says UTC so it can't be misread as local.
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const todaySince = todayStart.toISOString();
+      const { data: th } = await supabase
+        .from("v_master")
+        .select("*")
+        .gte("created_at", todaySince)
+        .eq("state", "open")
+        .eq("priority", "H")
+        .order("final_rank_score", { ascending: false, nullsFirst: false })
+        .limit(12);
+      setTodayHigh((th as VMaster[]) ?? []);
+      // Coverage: most of today's arrivals are still unclassified while the backlog drains,
+      // so the table is a floor, not a complete list. Say that rather than imply completeness.
+      const openedToday = await count((q) => q.gte("created_at", todaySince).eq("state", "open"));
+      const classifiedToday = await count((q) => q.gte("created_at", todaySince).eq("state", "open").not("priority", "is", null));
+      setTodayCoverage({ opened: openedToday, classified: classifiedToday });
+
+      // The active count is open-minus-filtered, and the gap is ~3.4k issues. Query the
+      // whole equation so the dashboard can show its own arithmetic instead of leaving
+      // "active" to be misread as the repo's open count.
+      const openTotal = await count((q) => q.eq("state", "open"));
+      const filtered = await count((q) => q.eq("state", "open").eq("eligible", false));
+      const reasons = await Promise.all(
+        EXCLUDE_LABELS.map(async (lbl) =>
+          [lbl, await count((q) => q.eq("state", "open").eq("eligible", false).contains("labels", [lbl]))] as [string, number]
+        )
+      );
+      setTally({ open: openTotal, filtered, reasons: reasons.filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]) });
 
       // Any kind — a catchup backfill changes classifications, so it is a data update too.
       const { data: b } = await supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(1);
@@ -77,7 +113,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
     <section className="view">
       <div className="greet">
         <Starburst />
-        <h1 className="display">Claude Code backlog</h1>
+        <h1 className="display">Claude Code GitHub Issues Dashboard</h1>
       </div>
       <div className="view-sub">
         {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} ·{" "}
@@ -85,39 +121,97 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       </div>
 
       <div className="grid grid-kpi">
-        <Tile label="Active issues" value={kpi.active.toLocaleString()} sub="open & eligible" />
+        <Tile
+          label="Active issues"
+          value={kpi.active.toLocaleString()}
+          sub={tally ? `of ${tally.open.toLocaleString()} open · ${tally.filtered.toLocaleString()} filtered` : "open & eligible"}
+        />
         <Tile label="New issues (24h)" value={kpi.new24.toLocaleString()} sub="created in the last day" />
         <Tile label="Closed (24h)" value={kpi.closed24.toLocaleString()} sub="closed in the last day" />
+        {/* Batch id / kind is ops detail — it lives in Batches & ops, not here. */}
         <Tile
           label="Last update"
           value={batch?.[0] ? timeET(batch[0].started_at) : "—"}
-          ok={batch?.[0]
-            ? `batch #${batch[0].id} · ${batchKind(batch[0].kind)}${batch[0].status === "ok" ? "" : " · " + batch[0].status}`
-            : undefined}
+          sub={batch?.[0] && batch[0].status !== "ok" ? `last run ${batch[0].status}` : "data refreshed"}
         />
       </div>
 
-      <div
-        className="card quiet-callout"
-        role="button"
-        tabIndex={0}
-        onClick={() => ctx.goMaster({ quiet: true })}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ctx.goMaster({ quiet: true }); }
-        }}
-      >
-        <span className="qc-mark" aria-hidden>◇</span>
-        <div>
-          <div className="qc-head"><b>{quiet.toLocaleString()}</b> high-severity issues with near-zero engagement</div>
-          <div className="qc-sub">
-            Impact and votes are only loosely related here — these are the silent data-loss, consent, and
-            billing defects an engagement-ranked list buries.{" "}
-            <span className="qc-link">Open the Quiet Severe view →</span>
+      {tally && (
+        <div className="card card-pad tally">
+          <div className="tally-head">How the active count adds up</div>
+          <div className="tally-row">
+            <span className="tally-op" aria-hidden />
+            <span className="tally-n">{tally.open.toLocaleString()}</span>
+            <span className="tally-lbl">open in anthropics/claude-code</span>
+          </div>
+          <div className="tally-row">
+            <span className="tally-op" aria-hidden>−</span>
+            <span className="tally-n">{tally.filtered.toLocaleString()}</span>
+            <span className="tally-lbl">
+              filtered out
+              {tally.reasons.length > 0 && (
+                <span className="tally-why">
+                  {tally.reasons.map(([lbl, n]) => `${lbl} ${n.toLocaleString()}`).join(" · ")}
+                  <span className="tally-note"> — labels overlap, so these don’t sum</span>
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="tally-row tally-total">
+            <span className="tally-op" aria-hidden>=</span>
+            <span className="tally-n">{kpi.active.toLocaleString()}</span>
+            <span className="tally-lbl">active — what this dashboard ranks</span>
           </div>
         </div>
+      )}
+
+      <div className="card card-pad">
+        <div className="card-head">
+          <div>
+            <div className="card-title">New High priority · opened today</div>
+            <div className="card-sub">
+              Filed since 00:00 UTC and still open
+              {todayCoverage && (
+                <> · {todayCoverage.classified.toLocaleString()} of {todayCoverage.opened.toLocaleString()} today’s
+                arrivals classified so far{todayCoverage.classified < todayCoverage.opened
+                  ? " — the rest are still in the classify queue, so this list can grow"
+                  : ""}</>
+              )}
+            </div>
+          </div>
+        </div>
+        {todayHigh.length === 0 ? (
+          <div style={{ color: "var(--text-3)", fontSize: 13, padding: "10px 2px" }}>
+            No High-priority issues opened today yet.
+          </div>
+        ) : (
+          <div className="table-card" style={{ border: "none", boxShadow: "none", borderRadius: 0 }}>
+            <table className="master today-high">
+              <thead>
+                <tr>
+                  <th>#</th><th>Title</th><th>Area</th><th>Theme</th>
+                  <th style={{ textAlign: "right" }}>Reacts</th>
+                  <th style={{ textAlign: "right" }}>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayHigh.map((r) => (
+                  <tr key={r.number} onClick={() => ctx.openDrawer(r)}>
+                    <td className="t-num">#{r.number}</td>
+                    <td className="t-title">{r.title}</td>
+                    <td><span className="tag">{r.area ?? "—"}</span></td>
+                    <td>{r.theme ? <span className="tag theme-t">{themeLabel(r.theme)}</span> : <span className="tag">—</span>}</td>
+                    <td className="t-r">{fmtK(r.reactions_total)}</td>
+                    <td className="t-r">{Math.round(r.final_rank_score ?? r.retrieval_score ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-2a">
+      <div className="grid grid-2a" style={{ marginTop: 14 }}>
         <div className="card card-pad">
           <div className="card-head"><div><div className="card-title">Intake vs. closes</div><div className="card-sub">Issues opened and closed per day · last 14 complete days (UTC)</div></div></div>
           <IntakeChart {...trend} />

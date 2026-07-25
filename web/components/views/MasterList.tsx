@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
-import { THEME_NAMES } from "@/lib/types";
+import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { fmtK, fmtAge, relDays } from "@/lib/format";
 import { PriorityPill } from "../ui";
 import { IconSearch } from "../Icons";
@@ -65,7 +65,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
   const [tri, setTri] = useState("");
   const [stateF, setStateF] = useState("active");
   const [quiet, setQuiet] = useState(!!preset?.quiet);
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "sc", dir: -1 });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "new", dir: SORTS.new.dir });
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<VMaster[]>([]);
   const [total, setTotal] = useState(0);
@@ -139,7 +139,8 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
       <div className="view-head">
         <h1 className="display">Master list</h1>
         <div className="view-sub">
-          Every active issue, ranked by the deterministic retrieval score — engagement velocity × severity × duplicate mass.
+          Every active issue, newest first by default. Sort by <b>Retrieval score</b> to rank by the
+          deterministic signal — engagement velocity × severity × duplicate mass.
         </div>
       </div>
 
@@ -155,6 +156,8 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
         <select className="sel" value={theme} onChange={(e) => setTheme(e.target.value)}>
           <option value="">Theme · all</option>
           {themeOptions.map(([k, name]) => <option key={k} value={k}>{name}</option>)}
+          {/* "none" is a real classifier verdict (fits none of the seven), not missing data. */}
+          <option value="none">Other</option>
         </select>
         <select className="sel" value={prio} onChange={(e) => setPrio(e.target.value)}>
           <option value="">Priority · all</option>
@@ -220,7 +223,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
             {rows.map((r) => {
               const closed = r.state === "closed";
               const score = Math.round(r.retrieval_score ?? 0);
-              const themeShort = r.theme ? THEME_NAMES[r.theme]?.split(" ")[0].replace("&", "") : null;
+              const themeShort = themeLabel(r.theme)?.split(" ")[0].replace("&", "") ?? null;
               return (
                 <tr key={r.number} className={closed ? "closed" : undefined} onClick={() => ctx.openDrawer(r)}>
                   <td className="t-num">#{r.number}</td>
