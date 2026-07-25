@@ -14,12 +14,48 @@ inline JSON (the schema *content*), not a path.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from typing import Any, Sequence
 
 from . import db
 
 BODY_LEAD_MAX = 1200  # digest body cap (tighter than the stored 1500 to keep batches lean)
+
+
+def _error_detail(stdout: str) -> str:
+    """Pull the useful fields out of a failed `claude -p` envelope, else the raw head."""
+    try:
+        env = json.loads(stdout)
+    except (ValueError, TypeError):
+        return repr(stdout[:400])
+    keep = {k: env[k] for k in ("subtype", "api_error_status", "result", "is_error")
+            if k in env}
+    return repr(keep) if keep else repr(stdout[:400])
+
+
+def subprocess_env(cfg: dict[str, Any]) -> dict[str, str]:
+    """Pick the credential `claude -p` runs on, explicitly.
+
+    An ANTHROPIC_API_KEY anywhere in the environment silently OUTRANKS the subscription
+    login — the CLI says so on stderr and bills the API. Because run_structured() loads
+    .env into this process, a key sitting in a local .env meant `api_fallback: false`
+    quietly ran on (and billed) the API anyway. So decide here rather than inherit:
+
+      api_fallback: false → drop ANTHROPIC_API_KEY, run on the subscription
+      api_fallback: true  → keep it, drop the OAuth token (the documented escape hatch
+                            for when the subscription is rate-limited)
+    """
+    env = dict(os.environ)
+    if cfg["classifier"].get("api_fallback"):
+        if not env.get("ANTHROPIC_API_KEY"):
+            raise RuntimeError(
+                "classifier.api_fallback is true but ANTHROPIC_API_KEY is not set."
+            )
+        env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+    else:
+        env.pop("ANTHROPIC_API_KEY", None)
+    return env
 
 
 def build_digest(issue: dict[str, Any], features: dict[str, Any],
@@ -106,9 +142,15 @@ def run_structured(system_prompt: str, user_prompt: str, schema_obj: dict[str, A
         "--json-schema", json.dumps(schema_obj),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                          cwd=db.REPO_ROOT)
+                          cwd=db.REPO_ROOT, env=subprocess_env(db.load_config()))
     if proc.returncode != 0:
-        raise RuntimeError(f"claude -p exited {proc.returncode}: {proc.stderr[:800]}")
+        # stderr is often EMPTY on a usage-limit exit; the reason lives in the stdout
+        # envelope (`subtype`, `api_error_status`). Reporting only stderr turned every
+        # such failure into a bare "exited 1" with nothing to diagnose.
+        raise RuntimeError(
+            f"claude -p exited {proc.returncode}: "
+            f"stderr={proc.stderr[:400]!r} stdout={_error_detail(proc.stdout)}"
+        )
 
     env = json.loads(proc.stdout)
     if env.get("is_error"):
