@@ -215,6 +215,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("re")}>Reacts{arr("re")}</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("vel")}>Vel{arr("vel")}</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("age")}>Age{arr("age")}</th>
+              <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("upd")} title="Time since the issue last saw activity (GitHub updated_at — comment, edit, or label change)">Last activity{arr("upd")}</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("cl")}>Cluster{arr("cl")}</th>
               <th>Triage</th>
             </tr>
@@ -245,6 +246,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
                   <td className="t-r">{fmtK(r.reactions_total)}</td>
                   <td className="t-r">{(r.f_velocity ?? 0).toFixed(1)}</td>
                   <td className="t-r">{fmtAge(r.age_days)}</td>
+                  <td className="t-r">{relDays(r.updated_at)}</td>
                   <td className="t-r">{(r.cluster_size ?? 1) > 1 ? "×" + r.cluster_size : "—"}</td>
                   <td>
                     {closed ? (
@@ -257,7 +259,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
               );
             })}
             {!loading && rows.length === 0 && (
-              <tr><td className="empty-row" colSpan={11}>No issues match these filters.</td></tr>
+              <tr><td className="empty-row" colSpan={12}>No issues match these filters.</td></tr>
             )}
           </tbody>
         </table>

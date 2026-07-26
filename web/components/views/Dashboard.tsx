@@ -96,12 +96,11 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   return (
     <section className="view">
       <div className="greet">
-        <img className="greet-mark" src="/clawdpixel.svg" alt="" />
         <h1 className="display">Claude Code GitHub Issues Dashboard</h1>
       </div>
       <div className="view-sub">
         {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} ·{" "}
-        {kpi.active.toLocaleString()} active issues in anthropics/claude-code · pipeline healthy
+        {kpi.active.toLocaleString()} active issues in anthropics/claude-code
       </div>
 
       <div className="grid grid-kpi">

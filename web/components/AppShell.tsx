@@ -16,6 +16,17 @@ import { Ops } from "./views/Ops";
 export type ViewKey = "dash" | "notable" | "master" | "themes" | "ops";
 export type MasterPreset = { priority?: string; theme?: string; quiet?: boolean } | null;
 
+const VIEW_KEYS: ViewKey[] = ["dash", "master", "notable", "themes", "ops"];
+
+// The whole app is one statically-prerendered route, so view state lived only in React and
+// was lost on refresh and invisible to the Back button. Mirroring it into the URL hash gives
+// both for free, with no server routing. (The master-list preset is deliberately not encoded
+// — a hash deep-link lands on the unfiltered list.)
+const viewFromHash = (): ViewKey => {
+  const h = window.location.hash.replace(/^#/, "") as ViewKey;
+  return VIEW_KEYS.includes(h) ? h : "dash";
+};
+
 const TITLES: Record<ViewKey, string> = {
   dash: "Dashboard",
   notable: "New & Notable",
@@ -65,25 +76,42 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
     setTheme(t);
   }, []);
 
+  // Read the hash on mount (refresh / deep link) and on Back/Forward. Initial state stays
+  // "dash" so the client's first render matches the prerendered HTML.
+  useEffect(() => {
+    const apply = () => {
+      const v = viewFromHash();
+      setView(v);
+      if (v !== "master") setPreset(null);
+    };
+    apply();
+    window.addEventListener("popstate", apply);
+    return () => window.removeEventListener("popstate", apply);
+  }, []);
+
   const applyTheme = (t: "light" | "dark") => {
     setTheme(t);
     document.documentElement.setAttribute("data-theme", t);
     localStorage.setItem("cc-theme", t);
   };
 
+  // One history entry per view change, so Back walks the tabs the user actually visited.
+  const pushView = (v: ViewKey) => {
+    if (`#${v}` !== window.location.hash) window.history.pushState(null, "", `#${v}`);
+    setView(v);
+    setNavOpen(false);
+    document.querySelector("main")?.scrollTo(0, 0);
+  };
+
   const openDrawer = useCallback((row: VMaster) => setDrawerRow(row), []);
   const goMaster = useCallback((p: MasterPreset) => {
     setPreset(p);
-    setView("master");
-    setNavOpen(false);
-    document.querySelector("main")?.scrollTo(0, 0);
+    pushView("master");
   }, []);
 
   const nav = (v: ViewKey) => {
-    setView(v);
     if (v !== "master") setPreset(null);
-    setNavOpen(false);
-    document.querySelector("main")?.scrollTo(0, 0);
+    pushView(v);
   };
 
   const ctx: ShellCtx = { openDrawer, toast, goMaster };
