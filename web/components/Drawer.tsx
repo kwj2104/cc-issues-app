@@ -111,18 +111,6 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
               </div>
             )}
 
-            {row.rationale && (
-              <div className="d-sec">
-                <div className="d-label">Why it ranks here</div>
-                <div className="d-rat">{row.rationale}</div>
-                <div className="conf-row">
-                  <span>Classifier confidence</span>
-                  <div className="meter" style={{ maxWidth: 150 }}><i style={{ width: `${Math.round((row.confidence ?? 0) * 100)}%` }} /></div>
-                  <b style={{ color: "var(--text-2)" }}>{Math.round((row.confidence ?? 0) * 100)}%</b>
-                </div>
-              </div>
-            )}
-
             <Verification row={row} />
 
 
