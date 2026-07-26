@@ -6,7 +6,7 @@ Context: `CLAUDE.md` first, then `docs/`, then `design/` for Phase 3+.
 
 ## Phase 0 — Setup (human + scaffold) ✅ mostly done by kit
 
-- [x] Kevin: accounts, secrets, schema applied (see `README.md` — ~30 min, one-time)
+- [x] Kevin: accounts, secrets, schema applied (see `docs/setup.md` — ~30 min, one-time)
 - [x] Repo scaffold, schema, workflows, prompts, config, design assets (this kit)
 - [x] Sanity: `workflow_dispatch` proven — sync/backfill/nightly all run green on live data
 

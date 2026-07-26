@@ -1,92 +1,154 @@
-# Claude Code Issue Tracker — setup runbook
+# Claude Code GitHub Issues Dashboard
 
-Internal tracker for the `anthropics/claude-code` backlog: deterministic retrieval + Claude
-classification every 2 hours (billed to your Max subscription, running on GitHub's cloud) +
-a claude.ai-styled dashboard on Vercel. Infra cost: **$0/month** on free tiers.
+A triage dashboard for the `anthropics/claude-code` issue backlog — roughly **12,600 open
+issues** and several hundred new ones a day, which is far past what anyone can read.
 
-You do the ~30 minutes of one-time account wiring below; Claude Code builds the rest
-(`PLAN.md` Phases 1–5, roughly 4–5 sessions).
+The job it does: keep a ranked, categorised, continuously-updated view of that backlog so a
+PM can answer *"what should we look at first today?"* without opening GitHub.
 
-## One-time setup (~30 min)
+It is **read-only**. Nothing here writes to GitHub — no comments, no labels, no closes.
 
-**1. Create the repo** (private is fine — the cron budget fits free minutes):
+---
 
-```bash
-gh repo create claude-issue-tracker --private --clone
-# copy this kit's contents into it, then:
-git add -A && git commit -m "scaffold: schema, workflows, prompts, specs, design" && git push
-```
+## How it works, in one breath
 
-**2. Supabase** (you have the account): create a project (any region) →
-SQL Editor → paste all of `db/schema.sql` → Run. Then Project Settings → API: copy the
-**Project URL**, **anon** key, and **service_role** key. Also Project Settings → Database →
-**Connection string → URI** (Session pooler): this is `DATABASE_URL`, the direct Postgres DSN
-the pipeline uses via `psycopg` (the service_role key is a PostgREST JWT, not a DB password).
+Every two hours a scheduled job pulls issues that changed since the last run, recomputes a
+deterministic **retrieval score** from engagement and severity signals, asks Claude to
+classify anything new or materially changed against a frozen rubric, and runs a **second,
+adversarial pass** over anything it called High. The dashboard reads the result.
 
-**3. GitHub PAT** for reading the claude-code repo: github.com → Settings → Developer settings →
-Fine-grained tokens → new token, Public repositories (read-only), 90-day expiry is fine.
+Two things follow from that design and are worth internalising:
 
-**4. Claude Max token** (the classifier's auth — one command, on your machine):
+- **The ranking is mostly arithmetic, not opinion.** Reactions, comments, velocity, severity
+  keywords, duplicate-cluster size. The model's judgement is one weighted input, not the
+  whole answer.
+- **Nothing is ever deleted or overwritten destructively.** Every run is a re-runnable
+  upsert, so a failed run leaves the data consistent and the next run absorbs the gap.
 
-```bash
-claude setup-token     # log in with your Max account; copy the long-lived token it prints
-```
+---
 
-**5. Repo secrets:**
+## The five views
 
-```bash
-gh secret set SYNC_GITHUB_PAT             # paste the PAT
-gh secret set CLAUDE_CODE_OAUTH_TOKEN     # paste the setup-token output
-gh secret set SUPABASE_URL                # https://YOURPROJECT.supabase.co
-gh secret set SUPABASE_SERVICE_ROLE_KEY   # the service_role key
-gh secret set DATABASE_URL                # Postgres DSN (Database → Connection string → URI)
-```
-
-**6. Seed data:** drop `claude_code_issue_log.csv` (from the July review workbook) into
-`data/seed/`. It's gitignored — it only needs to exist where backfill runs, so either commit it
-deliberately or run the seed-import from a machine that has it (see `data/seed/README.md`).
-
-**7. Local env for development:** `cp .env.example .env` and fill it in.
-
-## Build it with Claude Code
-
-```bash
-cd claude-issue-tracker && claude
-```
-
-> Read CLAUDE.md and PLAN.md, then start Phase 1. Work through the acceptance criteria and
-> stop for my review at the end of each phase.
-
-That's the whole prompt. Everything Claude Code needs is in the repo: `docs/build-plan.md`
-(architecture + decisions), `docs/retrieval-spec.md` (exact pipeline math), `design/mockup.html` +
-`design/design-spec.md` (the frontend, fully designed), and the frozen classifier prompts.
-
-## First data (after Phase 1–2)
-
-Actions tab → **backfill** → run with mode `census` (minutes) → then `seed-import` → then
-`catchup` a few times (≤150 classifications each) until the queue is empty — or just let the
-2-hourly sync drain it over a day or two. The **sync** workflow is live from the moment Phase 2
-merges; it self-heals gaps, so missed or failed runs cost nothing.
-
-## Deploy the app (after Phase 3)
-
-Vercel dashboard → Add New Project → import the repo → **Root Directory: `web`** → set env vars
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `EDIT_SECRET` → Deploy. Every push
-to main redeploys.
-
-## Costs & limits
-
-| Thing | Cost / limit |
+| View | Answers |
 |---|---|
-| Supabase free | $0 — 500 MB (we use <100 MB); 2h writes prevent the 7-day pause |
-| Vercel Hobby | $0 — nominally non-commercial; Pro $20 or Cloudflare if you want strictness |
-| GitHub Actions | $0 — ~1,650/2,000 free private minutes at 2h cadence (public repo = unlimited) |
-| Claude classification | $0 extra — Max subscription via OAuth token; interval load is light; catch-up is capped per run |
-| Fallback | `classifier.api_fallback` + `ANTHROPIC_API_KEY` ≈ $5–15/mo if ever needed |
+| **Dashboard** | What changed today? Intake vs. closes, priority mix, theme distribution, and the High-priority issues filed in the last 24 hours. |
+| **Master list** | The full searchable, filterable, sortable index. Newest first by default. |
+| **New & Notable** | The read-first queue: High-priority issues whose rating survived the adversarial check, grouped by the batch that classified them. |
+| **Themes** | How the backlog distributes across the seven recurring problem areas. |
+| **Batches & ops** | Is the pipeline actually healthy? Run history, failures, classification-quality samples. |
 
-## Ops in one paragraph
+Click any row anywhere to open the detail drawer: the model's summary, the verification
+basis, raw signals, duplicate-cluster members, and the live issue body fetched from GitHub.
 
-Pause everything: disable the workflows in the Actions tab. A missed day heals itself (cursor).
-Token rotation: rerun `claude setup-token` yearly; PAT per its expiry. Schema changes: edit
-`db/schema.sql`, paste the delta in the SQL Editor. Watch quality on the app's **Batches & ops**
-page — area agreement ≥ 85% and High share inside 15–25% are the health bars.
+---
+
+## Reading the numbers
+
+### "Active" is not "open"
+
+The dashboard's headline count is **active**, which is *open **and** eligible* — roughly
+**9,300** of the ~12,600 open issues. The ~3,400 difference is filtered out by label:
+
+`stale` · `duplicate` · `invalid` · `question` · `autoclose`
+
+The tile spells the gap out beneath the number — `of N open · M filtered` — so it can't be
+mistaken for GitHub's count. **A `stale`-labelled issue with 10+ reactions is rescued back
+in** — the
+stale bot labels on inactivity, not on whether the problem is fixed, and a well-supported
+issue shouldn't disappear because nobody commented for 60 days.
+
+### Priority, and what "Verified High" adds
+
+Every classified issue gets **High / Medium / Low**. Anything called High then has to survive
+a second model pass that is fed hard evidence — engagement relative to issues of the same
+age, how many near-duplicate reports exist, staleness against the current release — and is
+asked to argue the rating *down*. What survives is **Verified High**, split into two lanes
+that mean different things:
+
+- **Corroborated** — breadth backs it up. Escalate directly.
+- **Lead · solo report** — one credible report of a data-loss, security, consent, or billing
+  defect with a concrete mechanism. **This lane is deliberately permissive**: a wrong confirm
+  costs you 30 seconds, a missed silent-data-loss bug costs weeks. Expect some false
+  positives and investigate before escalating.
+
+### Two different scores
+
+- **Retrieval score** — the deterministic signal. Engagement velocity × severity × duplicate
+  mass. No model involved.
+- **Rank score** — retrieval blended with the model's priority judgement.
+
+Sort by retrieval score when you want to know what the *crowd* is telling you; sort by
+priority when you want the model's read.
+
+### Age vs. Last activity
+
+**Age** is time since the issue was filed. **Last activity** is time since anything happened
+to it. Both matter — a six-month-old issue that got a comment an hour ago is a different
+thing from one nobody has touched since March.
+
+### Themes
+
+Seven recurring problem areas, in plain language: **Unannounced changes · Cross-surface
+reliability · Trusted delegation · Lost work · Ignored permissions · Billing errors ·
+Overblocking**. Issues that fit none of them are labelled **Other** — that's a real verdict
+from the classifier, not missing data.
+
+---
+
+## What runs on its own
+
+| Job | Cadence | Does |
+|---|---|---|
+| **Sync** | every 2 hours | Pulls changed issues, scores, classifies new arrivals, verifies Highs. |
+| **Catch-up** | 6× daily | Works through the backlog of never-classified issues, highest-value first. |
+| **Nightly** | daily | Recomputes ages, re-clusters duplicates; Sundays, samples classifications for a quality check. |
+
+The dashboard refreshes itself when a job lands — an open tab updates in place, no reload.
+
+---
+
+## Known limits — read before trusting a number
+
+- **Not every issue is classified yet.** Around 5,500 active issues are still queued for
+  first classification. Any view that depends on priority or theme — the priority mix, the
+  theme bars, New & Notable — describes the *classified* subset, not the whole backlog. The
+  catch-up job is draining it; the queue shrinks daily.
+- **"Last activity" counts bot activity.** It reads GitHub's `updated_at`, which bumps on
+  comments, edits *and* label changes. An automated relabel looks like activity, so a fresh
+  timestamp doesn't always mean a human engaged.
+- **The classifier is a first pass, not a verdict.** It reads the title and the first ~1,200
+  characters of the body. It does not read the comment thread. The drawer shows its summary
+  and reasoning so you can disagree with it.
+- **Today's intake is partial.** The intake-vs-closes chart plots complete UTC days only —
+  today's numbers are the 24-hour KPI tiles instead, because a partial day plots as a cliff.
+- **Duplicate clusters are approximate.** Text similarity, recomputed nightly. Between
+  recomputes, new issues get a provisional assignment that may shift.
+
+---
+
+## When something looks wrong
+
+Go to **Batches & ops** first. It shows every pipeline run, whether it succeeded, and — for
+failures — the error. Two fields matter most:
+
+- **Last GitHub pull** — the last time we actually fetched from GitHub. It turns amber past
+  6 hours. If this is stale, the whole dashboard is stale no matter how healthy everything
+  else looks.
+- **Batch status** — a red `error` row means a run failed; hover it for the reason, and its
+  link goes to the GitHub Actions log.
+
+If the numbers look frozen, that page will tell you whether the pipeline stopped or the
+backlog genuinely didn't move.
+
+---
+
+## For engineers
+
+- `CLAUDE.md` — architecture, conventions, and the guardrails (frozen rubric, idempotence,
+  determinism) that must not be regressed.
+- `docs/retrieval-spec.md` — exact scoring formulas.
+- `docs/setup.md` — one-time account and secret wiring.
+- `db/schema.sql` — schema; apply by pasting into the Supabase SQL editor.
+- `PLAN.md` — build phases and acceptance criteria.
+
+Run the pipeline locally with `python -m pipeline.sync`; tests are `pytest pipeline/tests`.
