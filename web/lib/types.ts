@@ -85,11 +85,11 @@ export const themeLabel = (theme: string | null | undefined): string | null => {
 // these values are display only, phrased as the user-visible problem rather than the
 // internal shorthand ("Surface sprawl" → "Too many versions to keep reliable").
 export const THEME_NAMES: Record<string, string> = {
-  "change-velocity-rollout": "Changing things without telling anyone",
-  "surface-sprawl": "Too many versions to keep reliable",
-  "delegation-frontier": "Letting users trust the agent with more",
-  "work-session-integrity": "Losing the user’s work",
-  "consent-enforcement": "The agent ignores user’s rules",
-  "money-correctness": "Getting the bill wrong",
-  "safety-filter-precision": "Blocking safe work with no way to appeal",
+  "change-velocity-rollout": "Unannounced changes",
+  "surface-sprawl": "Cross-surface reliability",
+  "delegation-frontier": "Trusted delegation",
+  "work-session-integrity": "Lost work",
+  "consent-enforcement": "Ignored permissions",
+  "money-correctness": "Billing errors",
+  "safety-filter-precision": "Overblocking",
 };

@@ -56,7 +56,6 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
   const [view, setView] = useState<ViewKey>("dash");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [drawerRow, setDrawerRow] = useState<VMaster | null>(null);
-  const [newHigh, setNewHigh] = useState<number>(0);
   const [preset, setPreset] = useState<MasterPreset>(null);
   const [navOpen, setNavOpen] = useState(false);
   const version = useDataVersion();
@@ -65,13 +64,6 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
     const t = (localStorage.getItem("cc-theme") as "light" | "dark") || "light";
     setTheme(t);
   }, []);
-
-  useEffect(() => {
-    supabase
-      .from("v_new_high")
-      .select("number", { count: "exact", head: true })
-      .then(({ count }) => setNewHigh(count ?? 0));
-  }, [version]);
 
   const applyTheme = (t: "light" | "dark") => {
     setTheme(t);
@@ -100,7 +92,6 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
     <>
       <Sidebar
         active={view}
-        newHigh={newHigh}
         theme={theme}
         open={navOpen}
         onNav={nav}
@@ -112,7 +103,7 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
         <main>
           <div className="content">
             {view === "dash" && <Dashboard ctx={ctx} />}
-            {view === "notable" && <Notable ctx={ctx} onCount={setNewHigh} />}
+            {view === "notable" && <Notable ctx={ctx} />}
             {view === "master" && <MasterList ctx={ctx} preset={preset} />}
             {view === "themes" && <Themes ctx={ctx} />}
             {view === "ops" && <Ops />}

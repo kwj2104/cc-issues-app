@@ -18,7 +18,6 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
   const [tally, setTally] = useState<{ open: number; filtered: number } | null>(null);
   const [todayHigh, setTodayHigh] = useState<VMaster[]>([]);
-  const [todayCoverage, setTodayCoverage] = useState<{ opened: number; classified: number } | null>(null);
   const [batch, setBatch] = useState<any>(null);
   const version = useDataVersion();
   const [prio, setPrio] = useState<{ H: number; M: number; L: number }>({ H: 0, M: 0, L: 0 });
@@ -46,12 +45,6 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         .order("final_rank_score", { ascending: false, nullsFirst: false })
         .limit(12);
       setTodayHigh((th as VMaster[]) ?? []);
-      // Coverage: most of today's arrivals are still unclassified while the backlog drains,
-      // so the table is a floor, not a complete list. Say that rather than imply completeness.
-      const openedToday = await count((q) => q.gte("created_at", todaySince).eq("state", "open"));
-      const classifiedToday = await count((q) => q.gte("created_at", todaySince).eq("state", "open").not("priority", "is", null));
-      setTodayCoverage({ opened: openedToday, classified: classifiedToday });
-
       // Active is open MINUS ~3.4k label-filtered issues, so the headline never matches the
       // repo's open count. The tile's sub-line carries the gap; the per-label breakdown lives
       // in pipeline/config.yaml → eligibility.exclude_labels.
@@ -132,15 +125,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         <div className="card-head">
           <div>
             <div className="card-title">New High priority · last 24 hours</div>
-            <div className="card-sub">
-              Filed in the last 24 hours and still open
-              {todayCoverage && (
-                <> · {todayCoverage.classified.toLocaleString()} of {todayCoverage.opened.toLocaleString()} new
-                arrivals classified so far{todayCoverage.classified < todayCoverage.opened
-                  ? " — the rest are still in the classify queue, so this list can grow"
-                  : ""}</>
-              )}
-            </div>
+            <div className="card-sub">Filed in the last 24 hours and still open</div>
           </div>
         </div>
         {todayHigh.length === 0 ? (

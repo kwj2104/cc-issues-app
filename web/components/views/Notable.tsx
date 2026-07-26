@@ -43,7 +43,7 @@ const BATCH_KIND_NOTE: Record<string, string> = {
   seed: "seed review import",
 };
 
-export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) => void }) {
+export function Notable({ ctx }: { ctx: ShellCtx }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [kinds, setKinds] = useState<Record<number, string>>({});
@@ -53,13 +53,12 @@ export function Notable({ ctx, onCount }: { ctx: ShellCtx; onCount: (n: number) 
     supabase.from("v_new_high").select("*").limit(200).then(({ data }) => {
       setRows((data as Row[]) ?? []);
       setLoading(false);
-      onCount((data ?? []).length);
     });
     // v_new_high carries the batch's start time but not its kind; fetch it so each group can
     // say why its issues are there.
     supabase.from("batches").select("id, kind").order("id", { ascending: false }).limit(80)
       .then(({ data }) => setKinds(Object.fromEntries((data ?? []).map((b: any) => [b.id, b.kind]))));
-  }, [onCount, version]);
+  }, [version]);
 
   const groups = Array.from(new Set(rows.map((r) => r.batch_id)));
   const totals = {

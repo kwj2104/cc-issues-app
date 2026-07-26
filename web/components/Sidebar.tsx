@@ -7,17 +7,16 @@ import {
 
 const NAV: { key: ViewKey; label: string; Icon: (p: any) => JSX.Element }[] = [
   { key: "dash", label: "Dashboard", Icon: IconDash },
-  { key: "notable", label: "New & Notable", Icon: IconNotable },
   { key: "master", label: "Master list", Icon: IconMaster },
+  { key: "notable", label: "New & Notable", Icon: IconNotable },
   { key: "themes", label: "Themes", Icon: IconThemes },
   { key: "ops", label: "Batches & ops", Icon: IconOps },
 ];
 
 export function Sidebar({
-  active, newHigh, theme, open, onNav, onTheme,
+  active, theme, open, onNav, onTheme,
 }: {
   active: ViewKey;
-  newHigh: number;
   theme: "light" | "dark";
   open: boolean;
   onNav: (v: ViewKey) => void;
@@ -35,7 +34,6 @@ export function Sidebar({
         <button key={key} className={`nav-item${active === key ? " active" : ""}`} onClick={() => onNav(key)}>
           <Icon />
           {label}
-          {key === "notable" && newHigh > 0 ? <span className="nav-count">{newHigh}</span> : null}
         </button>
       ))}
       <div className="sidebar-foot">
