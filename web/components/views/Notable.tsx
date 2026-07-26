@@ -70,14 +70,6 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
     <section className="view">
       <div className="view-head">
         <h1 className="display">New &amp; Notable</h1>
-        <div className="view-sub">
-          High-priority issues whose rating <b>held up under a second, challenging pass</b>, split into two
-          lanes: <b>corroborated</b> (breadth backs it — escalate) and <b>leads</b> (one credible report of a
-          severe class — investigate first). The check itself is explained in <b>Batches &amp; ops</b>.
-          <br />
-          Grouped by the batch that <b>classified</b> it, which is not when it was filed — a catch-up batch
-          works through the unclassified backlog, so its issues can be months old.
-        </div>
       </div>
       <div className="toolbar">
         <span className="toolbar-meta">

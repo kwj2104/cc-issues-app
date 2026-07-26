@@ -136,10 +136,6 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
     <section className="view">
       <div className="view-head">
         <h1 className="display">Master list</h1>
-        <div className="view-sub">
-          Every active issue, newest first by default. Sort by <b>Retrieval score</b> to rank by the
-          deterministic signal — engagement velocity × severity × duplicate mass.
-        </div>
       </div>
 
       <div className="toolbar">

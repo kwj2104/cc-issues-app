@@ -8,56 +8,6 @@ import { fmtK, fmtAge, relDays } from "@/lib/format";
 import { PriorityPill } from "./ui";
 import { IconClose, IconExternal } from "./Icons";
 
-// Basis-keyed copy, not a per-issue string: the schema has no verify_reason column yet, so
-// anything issue-specific here would be invented.
-const VERIFY_COPY: Record<string, { pill: string; cls: string; text: string }> = {
-  corroborated: {
-    pill: "✓ corroborated",
-    cls: "corr",
-    text: "Confirmed and corroborated by breadth — duplicate reports and/or top age-band engagement back the rating.",
-  },
-  "class-solo": {
-    pill: "◇ lead · solo",
-    cls: "lead",
-    text:
-      "Confirmed on a single credible report of a data-loss / security / consent / billing defect with a " +
-      "concrete mechanism. This lane is deliberately permissive — a wrong confirm costs a glance; a missed " +
-      "silent-data-loss bug costs weeks — and its precision is policed by the weekly QA sample.",
-  },
-};
-
-function Verification({ row }: { row: VMaster }) {
-  const basis = row.verify_basis && VERIFY_COPY[row.verify_basis] ? VERIFY_COPY[row.verify_basis] : null;
-
-  return (
-    <div className="d-sec">
-      <div className="d-label">Verification</div>
-      {row.verified_high && basis ? (
-        <div className={`verify-box ${row.verify_basis}`}>
-          <span className={`pill ${basis.cls}`}>{basis.pill}</span>
-          <div className="verify-reason">{basis.text}</div>
-        </div>
-      ) : row.verified_high ? (
-        <div className="verify-reason" style={{ marginTop: 0 }}>
-          Rating held up under a second, challenging pass. This row predates the basis being recorded, so
-          which lane confirmed it isn’t stored.
-        </div>
-      ) : (
-        <div className="verify-reason" style={{ marginTop: 0 }}>
-          Single-pass rating — re-verifies automatically if its duplicate count grows or engagement crosses the
-          next age-band decile.
-        </div>
-      )}
-    </div>
-  );
-}
-
-const TRIAGE_LABEL: Record<string, string> = {
-  untriaged: "Untriaged", acknowledged: "Acknowledged", investigating: "Investigating",
-  escalated: "Escalated", resolved: "Resolved", wontfix: "Won’t fix",
-  "resolved-upstream-confirm": "Resolved upstream — confirm",
-};
-
 export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => void }) {
   const [members, setMembers] = useState<number[]>([]);
   const [body, setBody] = useState<string | null>(null);
@@ -111,15 +61,11 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
               </div>
             )}
 
-            <Verification row={row} />
-
-
             <div className="d-sec">
               <div className="d-label">Signals</div>
               <div className="sig-grid">
                 <div className="sig"><b>{fmtK(row.reactions_total)}</b><span>reactions</span></div>
                 <div className="sig"><b>{fmtK(row.comments)}</b><span>comments</span></div>
-                <div className="sig"><b>{(row.f_velocity ?? 0).toFixed(1)}</b><span>velocity term</span></div>
                 <div className="sig"><b>{fmtAge(row.age_days)}</b><span>age</span></div>
                 <div className="sig"><b>{Math.max(0, (row.cluster_size ?? 1) - 1)}</b><span>duplicates</span></div>
                 <div className="sig"><b>{closed ? "closed" : "active"}</b><span>{closed ? row.state_reason ?? "closed" : "status"}</span></div>
@@ -142,16 +88,6 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
                 <div className="d-summary" style={{ fontSize: 13, color: "var(--text-2)", whiteSpace: "pre-wrap", maxHeight: 220, overflow: "auto" }}>{body}</div>
               </div>
             )}
-
-            <div className="d-sec">
-              <div className="d-label">Triage</div>
-              <div className="tri-panel">
-                <div className="kv"><span>Status</span><b>{TRIAGE_LABEL[row.triage_status ?? "untriaged"] ?? "Untriaged"}</b></div>
-                <div className="kv"><span>Assignee</span><b>{row.assignee || "unassigned"}</b></div>
-                {row.triage_notes ? <div className="kv"><span>Notes</span><b style={{ fontWeight: 400, textAlign: "right" }}>{row.triage_notes}</b></div> : null}
-                {row.triaged_by ? <div className="kv"><span>Updated by</span><b>{row.triaged_by}</b></div> : null}
-              </div>
-            </div>
 
             <div className="d-meta">
               <span>first seen {fmtAge(row.age_days)} ago</span>
