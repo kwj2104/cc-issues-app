@@ -1,6 +1,6 @@
 "use client";
 
-import type { ViewKey, MasterPreset } from "./AppShell";
+import type { ViewKey } from "./AppShell";
 import {
   Starburst, IconDash, IconNotable, IconMaster, IconThemes, IconOps, IconSun, IconMoon,
 } from "./Icons";
@@ -13,15 +13,8 @@ const NAV: { key: ViewKey; label: string; Icon: (p: any) => JSX.Element }[] = [
   { key: "ops", label: "Batches & ops", Icon: IconOps },
 ];
 
-const SAVED: { label: string; dot: string; preset: MasterPreset }[] = [
-  { label: "Quiet severe", dot: "var(--accent)", preset: { quiet: true } },
-  { label: "Verified High · open", dot: "var(--hi-mark)", preset: { priority: "H" } },
-  { label: "Regressions this week", dot: "var(--med-mark)", preset: { theme: "change-velocity-rollout" } },
-  { label: "Money correctness", dot: "var(--s2)", preset: { theme: "money-correctness" } },
-];
-
 export function Sidebar({
-  active, newHigh, theme, open, onNav, onTheme, onSavedView,
+  active, newHigh, theme, open, onNav, onTheme,
 }: {
   active: ViewKey;
   newHigh: number;
@@ -29,7 +22,6 @@ export function Sidebar({
   open: boolean;
   onNav: (v: ViewKey) => void;
   onTheme: (t: "light" | "dark") => void;
-  onSavedView: (p: MasterPreset) => void;
 }) {
   return (
     <aside className={`sidebar${open ? " open" : ""}`}>
@@ -45,13 +37,6 @@ export function Sidebar({
           {label}
           {key === "notable" && newHigh > 0 ? <span className="nav-count">{newHigh}</span> : null}
         </button>
-      ))}
-      <div className="nav-label">SAVED VIEWS</div>
-      {SAVED.map((s) => (
-        <div key={s.label} className="saved-item" onClick={() => onSavedView(s.preset)}>
-          <span className="saved-dot" style={{ background: s.dot }} />
-          {s.label}
-        </div>
       ))}
       <div className="sidebar-foot">
         <div className="theme-toggle">

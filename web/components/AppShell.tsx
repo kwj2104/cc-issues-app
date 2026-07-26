@@ -105,7 +105,6 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
         open={navOpen}
         onNav={nav}
         onTheme={applyTheme}
-        onSavedView={(p) => goMaster(p)}
       />
       <div className={`nav-backdrop${navOpen ? " on" : ""}`} onClick={() => setNavOpen(false)} />
       <div className="app">

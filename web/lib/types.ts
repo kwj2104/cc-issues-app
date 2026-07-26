@@ -81,12 +81,15 @@ export const themeLabel = (theme: string | null | undefined): string | null => {
 };
 
 // The 7 established themes (slug → display name), matching the classifier's theme enum.
+// Plain-language names. The KEYS are the classifier's frozen enum and must never change;
+// these values are display only, phrased as the user-visible problem rather than the
+// internal shorthand ("Surface sprawl" → "Too many versions to keep reliable").
 export const THEME_NAMES: Record<string, string> = {
-  "work-session-integrity": "Work & session integrity",
-  "consent-enforcement": "Consent & enforcement",
-  "safety-filter-precision": "Safety-filter precision",
-  "change-velocity-rollout": "Change velocity & rollout",
-  "surface-sprawl": "Surface sprawl",
-  "money-correctness": "Money correctness",
-  "delegation-frontier": "Delegation frontier",
+  "change-velocity-rollout": "Changing things without telling anyone",
+  "surface-sprawl": "Too many versions to keep reliable",
+  "delegation-frontier": "Letting users trust the agent with more",
+  "work-session-integrity": "Losing the user’s work",
+  "consent-enforcement": "The agent ignores user’s rules",
+  "money-correctness": "Getting the bill wrong",
+  "safety-filter-precision": "Blocking safe work with no way to appeal",
 };

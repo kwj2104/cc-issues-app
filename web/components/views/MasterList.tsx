@@ -223,13 +223,15 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
             {rows.map((r) => {
               const closed = r.state === "closed";
               const score = Math.round(r.retrieval_score ?? 0);
-              const themeShort = themeLabel(r.theme)?.split(" ")[0].replace("&", "") ?? null;
+              // No theme tag on the row: the names are now sentences, so the old first-word
+              // abbreviation ("Too", "Losing") is meaningless and the full name crowds out the
+              // title. Theme stays reachable via the filter and is shown in full in the drawer.
               return (
                 <tr key={r.number} className={closed ? "closed" : undefined} onClick={() => ctx.openDrawer(r)}>
                   <td className="t-num">#{r.number}</td>
                   <td className="t-title">
                     {r.title}
-                    {closed ? <span className="tag">{closeTag(r)}</span> : themeShort ? <span className="tag theme-t">{themeShort}</span> : null}
+                    {closed ? <span className="tag">{closeTag(r)}</span> : null}
                   </td>
                   <td><span className="tag">{r.type ?? "—"}</span></td>
                   <td><span className="tag">{r.area ?? "—"}</span></td>
