@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES, themeLabel } from "@/lib/types";
-import { fmtK, fmtAge, relDays } from "@/lib/format";
+import { fmtK, fmtAge, relDays, relTime, stampET } from "@/lib/format";
 import { PriorityPill } from "../ui";
 import { IconSearch } from "../Icons";
 import type { ShellCtx, MasterPreset } from "../AppShell";
@@ -28,9 +28,7 @@ const SORTS = {
   new: { col: "created_at", dir: -1, label: "Most recent" },
   upd: { col: "updated_at", dir: -1, label: "Recently updated" },
   re: { col: "reactions_total", dir: -1, label: "Reactions" },
-  vel: { col: "f_velocity", dir: -1, label: "Velocity" },
   age: { col: "age_days", dir: -1, label: "Age" },
-  cl: { col: "cluster_size", dir: -1, label: "Cluster size" },
 } as const;
 type SortKey = keyof typeof SORTS;
 
@@ -213,10 +211,8 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
               <th>#</th><th>Title</th><th>Type</th><th>Area</th><th>Priority</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("sc")}>Score{arr("sc")}</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("re")}>Reacts{arr("re")}</th>
-              <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("vel")}>Vel{arr("vel")}</th>
               <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("age")}>Age{arr("age")}</th>
-              <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("upd")} title="Time since the issue last saw activity (GitHub updated_at — comment, edit, or label change)">Last activity{arr("upd")}</th>
-              <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("cl")}>Cluster{arr("cl")}</th>
+              <th className="sortable" style={{ textAlign: "right" }} onClick={() => clickSort("upd")} title="When the issue last saw activity — GitHub updated_at (comment, edit, or label change). Times are ET.">Last activity{arr("upd")}</th>
               <th>Triage</th>
             </tr>
           </thead>
@@ -244,10 +240,11 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
                     </div>
                   </td>
                   <td className="t-r">{fmtK(r.reactions_total)}</td>
-                  <td className="t-r">{(r.f_velocity ?? 0).toFixed(1)}</td>
                   <td className="t-r">{fmtAge(r.age_days)}</td>
-                  <td className="t-r">{relDays(r.updated_at)}</td>
-                  <td className="t-r">{(r.cluster_size ?? 1) > 1 ? "×" + r.cluster_size : "—"}</td>
+                  <td className="t-r">
+                    <div>{relTime(r.updated_at)}</div>
+                    <div className="act-abs">{stampET(r.updated_at)}</div>
+                  </td>
                   <td>
                     {closed ? (
                       <span className="tri-chip"><span className="tri-dot" style={{ background: r.state_reason === "completed" ? "var(--good)" : "var(--micro)" }} />Closed {relDays(r.closed_at)} ago</span>
@@ -259,7 +256,7 @@ export function MasterList({ ctx, preset }: { ctx: ShellCtx; preset: MasterPrese
               );
             })}
             {!loading && rows.length === 0 && (
-              <tr><td className="empty-row" colSpan={12}>No issues match these filters.</td></tr>
+              <tr><td className="empty-row" colSpan={10}>No issues match these filters.</td></tr>
             )}
           </tbody>
         </table>

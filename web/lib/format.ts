@@ -44,6 +44,30 @@ export const timeET = (iso: string | null): string => {
   });
 };
 
+// Relative age with minute precision under the hour — fmtAge() floors everything below a
+// day to "1h", which is too coarse to tell a 5-minute-old comment from a 50-minute-old one.
+export const relTime = (iso: string | null): string => {
+  if (!iso) return "—";
+  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${Math.round(mins)}m ago`;
+  const hrs = mins / 60;
+  if (hrs < 24) return `${Math.round(hrs)}h ago`;
+  const days = hrs / 24;
+  if (days < 30) return `${Math.round(days)}d ago`;
+  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  return `${(days / 365).toFixed(1)}y ago`;
+};
+
+// Absolute wall-clock stamp, e.g. "Jul 23, 2:14 PM" — ET, matching timeET() elsewhere.
+export const stampET = (iso: string | null): string => {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+};
+
 export const relDays = (iso: string | null): string => {
   if (!iso) return "—";
   const days = (Date.now() - new Date(iso).getTime()) / 86400000;

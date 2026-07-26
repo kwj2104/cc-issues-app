@@ -222,7 +222,7 @@ h1.display{font-family:var(--serif);font-size:27px;font-weight:500;letter-spacin
 
 /* ---------- master table ---------- */
 .table-card{overflow-x:auto}
-table.master{width:100%;border-collapse:collapse;min-width:1140px}
+table.master{width:100%;border-collapse:collapse;min-width:960px}
 .master thead th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--micro);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--card-2);white-space:nowrap;user-select:none}
 .master thead th.sortable{cursor:pointer}
 .master thead th.sortable:hover{color:var(--text-2)}
@@ -234,6 +234,7 @@ table.master{width:100%;border-collapse:collapse;min-width:1140px}
 .master .t-title{max-width:320px;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .master .t-title .tag{margin-left:7px;font-size:10.5px;padding:1px 6px}
 .master .t-r{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-2)}
+.act-abs{font-size:10.5px;color:var(--micro);white-space:nowrap;margin-top:1px}
 .score-cell{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .score-bar{width:46px;height:5px;border-radius:999px;background:var(--card-2);border:1px solid var(--hairline);overflow:hidden}
 .score-bar>i{display:block;height:100%;background:var(--accent);border-radius:999px}
@@ -412,9 +413,7 @@ table.master.today-high{min-width:640px}
   table.master{min-width:530px}
   .master th:nth-child(3),.master td:nth-child(3),
   .master th:nth-child(4),.master td:nth-child(4),
-  .master th:nth-child(8),.master td:nth-child(8),
-  .master th:nth-child(11),.master td:nth-child(11),
-  .master th:nth-child(12),.master td:nth-child(12){display:none}
+  .master th:nth-child(10),.master td:nth-child(10){display:none}
   .master .t-title{max-width:200px}
   .master tbody td{padding:9px 8px}
 
