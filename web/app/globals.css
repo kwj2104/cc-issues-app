@@ -256,7 +256,6 @@ table.master{width:100%;border-collapse:collapse;min-width:960px}
 .nn-score span{display:block;font-size:10.5px;color:var(--micro)}
 .ack-btn{white-space:nowrap}
 .nn-lane-h{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-3);margin:6px 0 8px;flex-wrap:wrap}
-.nn-vr{font-size:11.5px;font-style:italic;color:var(--text-3);margin-top:4px;line-height:1.45}
 
 
 /* today's new-High table sits inside a card, so it needs no min-width scroll floor */

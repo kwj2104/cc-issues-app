@@ -28,10 +28,6 @@ const LANES = [
   },
 ] as const;
 
-// No per-issue verify reason exists in the schema yet, so this is lane-level copy, not a
-// fabricated per-issue string.
-const SOLO_NOTE = "Single credible report — kept because for this class corroboration often never arrives.";
-
 // Batches group by *when the classifier first looked at an issue*, not by when the issue was
 // filed — so an issue opened months ago lands in today's batch. Why it landed there depends on
 // the batch kind, and that is the difference between "this changed today" and "we finally got
@@ -119,13 +115,13 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
                     <span>· {lane.blurb}</span>
                   </div>
                   {lane.items.map((i) => (
-                    <NotableCard key={i.number} row={i} ctx={ctx} note={lane.basis === "class-solo" ? SOLO_NOTE : null} />
+                    <NotableCard key={i.number} row={i} ctx={ctx} />
                   ))}
                 </div>
               )
             )}
 
-            {unlaned.map((i) => <NotableCard key={i.number} row={i} ctx={ctx} note={null} />)}
+            {unlaned.map((i) => <NotableCard key={i.number} row={i} ctx={ctx} />)}
           </div>
         );
       })}
@@ -133,7 +129,7 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
   );
 }
 
-function NotableCard({ row: i, ctx, note }: { row: Row; ctx: ShellCtx; note: string | null }) {
+function NotableCard({ row: i, ctx }: { row: Row; ctx: ShellCtx }) {
   return (
     <div className="card nn-card" onClick={() => ctx.openDrawer(i)} style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
@@ -152,7 +148,6 @@ function NotableCard({ row: i, ctx, note }: { row: Row; ctx: ShellCtx; note: str
           <span>opened {relDays(i.created_at)} ago</span>
           <span>updated {relDays(i.updated_at)} ago</span>
         </div>
-        {note && <div className="nn-vr">{note}</div>}
       </div>
       <div className="nn-score"><b>{Math.round(i.final_rank_score ?? i.retrieval_score ?? 0)}</b><span>rank score</span></div>
     </div>
