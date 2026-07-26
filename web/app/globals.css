@@ -125,6 +125,7 @@ h1.display{font-family:var(--serif);font-size:27px;font-weight:500;letter-spacin
    forces the whole column — and the page — wider than the viewport. */
 .grid{display:grid;gap:14px}
 .grid-kpi{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}
+.grid-kpi.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .grid-2a{grid-template-columns:minmax(0,7fr) minmax(0,5fr);margin-bottom:14px}
 .grid-2b{grid-template-columns:minmax(0,5fr) minmax(0,7fr);margin-bottom:14px}
 @media(max-width:1080px){
@@ -177,18 +178,6 @@ h1.display{font-family:var(--serif);font-size:27px;font-weight:500;letter-spacin
 .tb-track{flex:1 1 auto;min-width:0;height:14px;background:var(--card-2);border:1px solid var(--hairline);border-radius:5px;overflow:hidden}
 .tb-track>i{display:block;height:100%;background:var(--s1);border-radius:4px}
 .tb-val{width:46px;flex:none;text-align:right;font-size:12px;font-weight:600;color:var(--text-2);font-variant-numeric:tabular-nums}
-
-/* ---------- explainer card (what a metric actually means) ---------- */
-.explain-card{display:flex;gap:22px;align-items:stretch;margin-bottom:14px}
-.explain-figure{flex:none;width:158px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding-right:22px;border-right:1px solid var(--hairline)}
-.explain-value{font-size:40px;font-weight:650;line-height:1.05;letter-spacing:-.02em}
-.explain-cap{font-size:12px;color:var(--text-3)}
-.explain-body{flex:1 1 auto;min-width:0}
-.explain-body .card-title{margin-bottom:9px}
-.explain-body p{font-size:13px;line-height:1.62;color:var(--text-2);margin-bottom:9px}
-.explain-body p:last-child{margin-bottom:0}
-.explain-body b{color:var(--text);font-weight:600}
-.explain-foot{border-top:1px solid var(--hairline);padding-top:9px}
 
 /* ---------- pills / chips / badges ---------- */
 .pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:999px;padding:2.5px 9px;white-space:nowrap}
@@ -355,10 +344,6 @@ table.master.today-high{min-width:780px}
   .topbar{padding:10px 16px;gap:10px}
   .content{padding:22px 18px 56px}
   .theme-grid{grid-template-columns:minmax(0,1fr)}
-  .explain-card{flex-direction:column;gap:14px}
-  .explain-figure{width:auto;flex-direction:row;align-items:baseline;gap:11px;padding:0 0 12px;
-    border-right:none;border-bottom:1px solid var(--hairline)}
-  .explain-value{font-size:32px}
 }
 
 @media(max-width:640px){

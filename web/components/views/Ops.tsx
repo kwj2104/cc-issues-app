@@ -15,7 +15,6 @@ const dur = (b: Batch) => {
 export function Ops() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [state, setState] = useState<Record<string, string>>({});
-  const [vhigh, setVhigh] = useState<number | null>(null);
   const [batchTotal, setBatchTotal] = useState<number | null>(null);
   const [lastPull, setLastPull] = useState<Batch | null>(null);
   const version = useDataVersion();
@@ -30,7 +29,6 @@ export function Ops() {
     // the data look fresher upstream than it is.
     supabase.from("batches").select("*").eq("kind", "interval").order("started_at", { ascending: false }).limit(1)
       .then(({ data }) => setLastPull(((data ?? [])[0] as Batch) ?? null));
-    supabase.from("v_new_high").select("number", { count: "exact", head: true }).then(({ count }) => setVhigh(count ?? 0));
     supabase.from("sync_state").select("*").then(({ data }) => {
       const m: Record<string, string> = {};
       (data ?? []).forEach((r: any) => (m[r.key] = r.value));
@@ -42,7 +40,6 @@ export function Ops() {
   const pullAgeH = lastPull ? Math.floor((Date.now() - new Date(lastPull.started_at).getTime()) / 3600000) : 0;
   const pullStale = !!lastPull && pullAgeH >= 6;
 
-  const qaArea = state.qa_area_agreement ? Math.round(parseFloat(state.qa_area_agreement) * 100) : null;
   const qaHigh = state.qa_high_share ? Math.round(parseFloat(state.qa_high_share) * 100) : null;
 
   return (
@@ -52,42 +49,7 @@ export function Ops() {
         <div className="view-sub">Pipeline health, classification quality, and the full sync history. Every batch links to its GitHub Actions run.</div>
       </div>
 
-      <div className="card card-pad explain-card">
-        <div className="explain-figure">
-          <span className="explain-value">{vhigh ?? "—"}</span>
-          <span className="explain-cap">Verified High · open</span>
-        </div>
-        <div className="explain-body">
-          <div className="card-title">What &ldquo;Verified High&rdquo; means</div>
-          <p>
-            Every issue gets a priority from the classifier. Anything it calls <b>High</b> then has to
-            survive a <b>second, adversarial pass</b>: a fresh model run is handed the issue plus hard
-            numbers — how much engagement it has drawn compared with issues of the same age, how many
-            near-duplicate reports exist, how long since anyone touched it, and whether the newest
-            release already shipped a fix — and is asked to argue the rating <i>down</i>.
-          </p>
-          <p>
-            It throws out cosmetic complaints, anything with a workable workaround, and anything
-            already stale against the current release. It keeps issues it cannot talk down. A serious
-            enough class of problem — data loss, security, consent failures, billing — can pass on a
-            single report, but only when that report carries a concrete mechanism and a reproduction.
-          </p>
-          <p className="explain-foot">
-            So the count above is <b>&ldquo;how many open issues survived being argued against&rdquo;</b> — a
-            read-first queue, not a severity score. The full list lives in <b>New &amp; Notable</b>.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-kpi">
-        <div className="card tile">
-          <span className="tile-label">Area agreement</span>
-          <span className="tile-value">{qaArea != null ? qaArea + "%" : "—"}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 7 }}>
-            <div className="meter"><i style={{ width: `${qaArea ?? 0}%` }} /></div>
-            <span style={{ fontSize: 11, color: "var(--micro)" }}>floor 85</span>
-          </div>
-        </div>
+      <div className="grid grid-kpi cols-3">
         <div className="card tile">
           <span className="tile-label">High share (weekly QA)</span>
           <span className="tile-value">{qaHigh != null ? qaHigh + "%" : "—"}</span>
