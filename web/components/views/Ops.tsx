@@ -16,11 +16,15 @@ export function Ops() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [state, setState] = useState<Record<string, string>>({});
   const [vhigh, setVhigh] = useState<number | null>(null);
+  const [batchTotal, setBatchTotal] = useState<number | null>(null);
   const [lastPull, setLastPull] = useState<Batch | null>(null);
   const version = useDataVersion();
 
   useEffect(() => {
     supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(20).then(({ data }) => setBatches((data as Batch[]) ?? []));
+    // Real count — the tile used to render batches.length, which is the page size (20), not
+    // the number of batches on record.
+    supabase.from("batches").select("id", { count: "exact", head: true }).then(({ count }) => setBatchTotal(count ?? 0));
     // The delta sync is the only thing that pulls from GitHub; backfill/recluster batches
     // rework what we already have. Tracked separately so a run of catchup batches can't make
     // the data look fresher upstream than it is.
@@ -96,7 +100,7 @@ export function Ops() {
         </div>
         <div className="card tile">
           <span className="tile-label">Batches recorded</span>
-          <span className="tile-value">{batches.length}</span>
+          <span className="tile-value">{batchTotal ?? "—"}</span>
           <span className="tile-ok"><span className="sync-dot" style={{ animation: "none" }} />cron every 2h</span>
         </div>
       </div>
@@ -117,7 +121,9 @@ export function Ops() {
                     <td>{b.new_count}</td>
                     <td>{b.classified_count}</td>
                     <td>{b.new_high_count > 0 ? <span className="pill hi">{b.new_high_count}</span> : "0"}</td>
-                    <td><span className={b.status === "ok" ? "run-ok" : "run-warn"} style={{ fontWeight: 600 }}>● {b.status}</span></td>
+                    <td title={b.error ?? undefined}>
+                      <span className={b.status === "ok" ? "run-ok" : "run-warn"} style={{ fontWeight: 600 }}>● {b.status}</span>
+                    </td>
                     <td>{b.gha_run_url ? <a href={b.gha_run_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent-strong)" }}>logs ↗</a> : "—"}</td>
                   </tr>
                 ))}

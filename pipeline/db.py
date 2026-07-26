@@ -167,6 +167,48 @@ def set_state(conn: psycopg.Connection, key: str, value: str) -> None:
 # Batch bookkeeping
 # ---------------------------------------------------------------------------
 
+def record_batch_failure(kind: str, *, error: str, gha_run_url: str | None = None,
+                         started_at: Any = None) -> int:
+    """Log a failed run on its OWN connection, outside the run's transaction.
+
+    `batches` is an observability ledger, not part of the data a run computes — but
+    start_batch() writes into the run's transaction, and connect() rolls that back on any
+    exception. So a failed run rolled its own batch row back with everything else: the
+    failure erased its own audit trail, and the ops history could only ever show successes.
+    (Evidence: 32 rows, every one status='ok', with 17 gaps in the id sequence — one gap per
+    run that started, consumed a sequence value, then vanished on rollback.)
+
+    Writing on a separate autocommit connection is what makes the row survive.
+    """
+    conn = psycopg.connect(dsn(), row_factory=dict_row, autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "insert into batches(kind, status, error, gha_run_url, started_at, finished_at) "
+                "values (%s, 'error', %s, %s, coalesce(%s, clock_timestamp()), clock_timestamp()) "
+                "returning id",
+                (kind, (error or "")[:2000], gha_run_url, started_at),
+            )
+            return cur.fetchone()["id"]
+    finally:
+        conn.close()
+
+
+@contextmanager
+def batch_failure_guard(kind: str, gha_run_url: str | None = None,
+                        started_at: Any = None) -> Iterator[None]:
+    """Wrap an entrypoint so a crash still leaves a durable 'error' row, then re-raises."""
+    try:
+        yield
+    except Exception as exc:
+        try:
+            record_batch_failure(kind, error=f"{type(exc).__name__}: {exc}",
+                                 gha_run_url=gha_run_url, started_at=started_at)
+        except Exception as log_exc:  # never let bookkeeping mask the real failure
+            print(f"[batch] could not record failure: {log_exc}")
+        raise
+
+
 def start_batch(conn: psycopg.Connection, kind: str, gha_run_url: str | None = None) -> int:
     # clock_timestamp() (real wall-clock), NOT now() — the whole batch runs in one transaction,
     # where now() is constant, which would make every duration read 0.

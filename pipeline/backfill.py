@@ -54,7 +54,7 @@ def run_census(gha_run_url: str | None = None) -> dict[str, int]:
     docs = [feat.cluster_document(i["title"], i["body_lead"]) for i in issues]
     clusters = clust.recluster(numbers, docs, cfg)
 
-    with db.connect() as conn:
+    with db.batch_failure_guard("backfill", gha_run_url, as_of), db.connect() as conn:
         batch_id = db.start_batch(conn, "backfill", gha_run_url)
         run_id = f"batch-{batch_id}"
 
@@ -123,7 +123,7 @@ def run_closed_history(since: str = CLOSED_HISTORY_SINCE,
     if not issues:
         return {"issues": 0, "features_added": 0, "batch_id": 0}
 
-    with db.connect() as conn:
+    with db.batch_failure_guard("backfill", gha_run_url, as_of), db.connect() as conn:
         batch_id = db.start_batch(conn, "backfill", gha_run_url)
         run_id = f"batch-{batch_id}"
 
@@ -255,7 +255,7 @@ def run_catchup(limit: int | None = None, gha_run_url: str | None = None) -> dic
     cfg = db.load_config()
     limit = limit or cfg["classifier"]["catchup_per_run"]
 
-    with db.connect() as conn:
+    with db.batch_failure_guard("backfill", gha_run_url), db.connect() as conn:
         batch_id = db.start_batch(conn, "backfill", gha_run_url)
         with conn.cursor() as cur:
             cur.execute(

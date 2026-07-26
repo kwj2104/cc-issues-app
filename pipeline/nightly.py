@@ -91,7 +91,7 @@ def run_nightly(gha_run_url: str | None = None) -> dict[str, Any]:
     except Exception:
         rel = None
 
-    with db.connect() as conn:
+    with db.batch_failure_guard("recluster", gha_run_url, as_of), db.connect() as conn:
         batch_id = db.start_batch(conn, "recluster", gha_run_url)
         run_id = f"batch-{batch_id}"
         if rel:
