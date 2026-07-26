@@ -69,6 +69,7 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
   const [drawerRow, setDrawerRow] = useState<VMaster | null>(null);
   const [preset, setPreset] = useState<MasterPreset>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [routed, setRouted] = useState(false);
   const version = useDataVersion();
 
   useEffect(() => {
@@ -85,6 +86,7 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
       if (v !== "master") setPreset(null);
     };
     apply();
+    setRouted(true);
     window.addEventListener("popstate", apply);
     return () => window.removeEventListener("popstate", apply);
   }, []);
@@ -130,11 +132,14 @@ function Shell({ toast, toastMsg }: { toast: (m: string) => void; toastMsg: stri
         <Topbar title={TITLES[view]} onMenu={() => setNavOpen((o) => !o)} />
         <main>
           <div className="content">
-            {view === "dash" && <Dashboard ctx={ctx} />}
-            {view === "notable" && <Notable ctx={ctx} />}
-            {view === "master" && <MasterList ctx={ctx} preset={preset} />}
-            {view === "themes" && <Themes ctx={ctx} />}
-            {view === "ops" && <Ops />}
+            {/* Nothing renders until the hash has been read. Otherwise a deep link to
+                #master mounted the Dashboard first and fired its whole query set before
+                switching — the wasted round trips showed up as ~900ms on tab deep-links. */}
+            {routed && view === "dash" && <Dashboard ctx={ctx} />}
+            {routed && view === "notable" && <Notable ctx={ctx} />}
+            {routed && view === "master" && <MasterList ctx={ctx} preset={preset} />}
+            {routed && view === "themes" && <Themes ctx={ctx} />}
+            {routed && view === "ops" && <Ops />}
           </div>
         </main>
       </div>

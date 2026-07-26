@@ -14,14 +14,21 @@ export function Themes({ ctx }: { ctx: ShellCtx }) {
 
   useEffect(() => {
     (async () => {
-      const out = await Promise.all(
-        Object.keys(THEME_NAMES).map(async (k) => {
-          const { count } = await supabase.from("v_master").select("number", { count: "exact", head: true }).eq("is_active", true).eq("theme", k);
-          const { data: top } = await supabase.from("v_master").select("*").eq("is_active", true).eq("theme", k).order("retrieval_score", { ascending: false, nullsFirst: false }).limit(3);
-          return { key: k, count: count ?? 0, top: (top as VMaster[]) ?? [] };
-        })
-      );
-      setData(out.sort((a, b) => b.count - a.count));
+      // Two requests, not two per theme. The counts and the top-3-per-theme both come from
+      // read-model views (schema v1.4) instead of 7 count queries + 7 top-N queries.
+      const [countRes, topRes] = await Promise.all([
+        supabase.from("v_theme_counts").select("*"),
+        supabase.from("v_theme_top").select("*"),
+      ]);
+      const counts = new Map((countRes.data ?? []).map((r: any) => [r.theme, r.n as number]));
+      const tops = new Map<string, VMaster[]>();
+      for (const r of ((topRes.data as VMaster[]) ?? [])) {
+        if (!r.theme) continue;
+        (tops.get(r.theme) ?? tops.set(r.theme, []).get(r.theme)!).push(r);
+      }
+      setData(Object.keys(THEME_NAMES)
+        .map((k) => ({ key: k, count: counts.get(k) ?? 0, top: tops.get(k) ?? [] }))
+        .sort((a, b) => b.count - a.count));
     })();
   }, [version]);
 

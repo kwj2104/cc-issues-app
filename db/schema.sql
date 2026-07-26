@@ -1,4 +1,11 @@
--- Claude Code Issue Tracker — Supabase schema (v1.3)
+-- Claude Code Issue Tracker — Supabase schema (v1.4)
+-- Migrations: v1.4 (2026-07-26) adds three read-model views + two date indexes, purely to cut
+--   dashboard round trips. The dashboard was issuing ~45 separate PostgREST requests per load
+--   (28 of them one-per-day count queries for the intake chart, 10 more for the priority mix
+--   and theme bars), which measured 5.9s to first full render — the DB answered each in ~50ms;
+--   the cost was the request count. v_dashboard_stats / v_theme_counts / v_daily_activity
+--   answer the same questions in 3 requests; v_theme_top collapses the Themes tab's 14. View-only change plus CREATE INDEX; re-run this
+--   file (or just the blocks below) to apply, no data migration.
 -- Migrations: v1.3 (2026-07-24) adds v_master.priority_rank (H=1, M=2, L=3, unclassified=4) so the
 --   web master list can sort High→Medium→Low. PostgREST can only order by a column, and ordering on
 --   the letter itself reads H, L, M; priority_score is a 0-100 LLM score, so sorting by it
@@ -38,6 +45,9 @@ create table if not exists issues (
 create index if not exists idx_issues_state on issues(state);
 create index if not exists idx_issues_updated on issues(updated_at desc);
 create index if not exists idx_issues_labels on issues using gin(labels);
+-- The intake-vs-closes chart buckets by day over these two columns.
+create index if not exists idx_issues_created on issues(created_at desc);
+create index if not exists idx_issues_closed on issues(closed_at desc) where closed_at is not null;
 
 create table if not exists features (
   number          bigint primary key references issues(number) on delete cascade,
@@ -150,6 +160,53 @@ from v_master m
 join batches b on b.id = m.batch_id
 where m.verified_high and m.state = 'open'
 order by b.started_at desc, m.final_rank_score desc;
+
+-- ---- dashboard read models: one request each, instead of one request per number ----
+
+-- Every KPI on the dashboard in a single row / single pass over the join.
+create or replace view v_dashboard_stats with (security_invoker = on) as
+select
+  count(*) filter (where is_active)                                       as active,
+  count(*) filter (where state = 'open')                                  as open_total,
+  count(*) filter (where state = 'open' and not coalesce(eligible, true)) as filtered_out,
+  count(*) filter (where created_at >= now() - interval '24 hours')       as new_24h,
+  count(*) filter (where closed_at  >= now() - interval '24 hours')       as closed_24h,
+  count(*) filter (where is_active and priority = 'H')                    as prio_h,
+  count(*) filter (where is_active and priority = 'M')                    as prio_m,
+  count(*) filter (where is_active and priority = 'L')                    as prio_l
+from v_master;
+
+create or replace view v_theme_counts with (security_invoker = on) as
+select theme, count(*)::int as n
+from v_master
+where is_active and theme is not null
+group by theme;
+
+-- Top 3 issues per theme for the Themes cards — one request instead of one per theme.
+create or replace view v_theme_top with (security_invoker = on) as
+select * from (
+  select m.*, row_number() over (partition by m.theme
+                                 order by m.retrieval_score desc nulls last, m.number desc) as rn
+  from v_master m
+  where m.is_active and m.theme is not null
+) t where t.rn <= 3;
+
+-- 14 complete UTC days ending yesterday — the current day is excluded on purpose (it is
+-- always partial, and just after UTC midnight it plots as a cliff to zero).
+create or replace view v_daily_activity with (security_invoker = on) as
+with days as (
+  select generate_series(
+           (date_trunc('day', now() at time zone 'UTC') - interval '14 days')::date,
+           (date_trunc('day', now() at time zone 'UTC') - interval '1 day')::date,
+           interval '1 day')::date as day
+),
+o as (select (created_at at time zone 'UTC')::date d, count(*)::int n
+      from issues where created_at >= now() - interval '16 days' group by 1),
+c as (select (closed_at  at time zone 'UTC')::date d, count(*)::int n
+      from issues where closed_at  >= now() - interval '16 days' group by 1)
+select days.day, coalesce(o.n, 0) as opened, coalesce(c.n, 0) as closed
+from days left join o on o.d = days.day left join c on c.d = days.day
+order by days.day;
 
 -- ============ RLS: public read, service-role write ============
 

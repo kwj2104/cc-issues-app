@@ -12,13 +12,8 @@ import { IconStack } from "../Icons";
 // Show a short list by default; the rest is one click away rather than a wall of rows.
 const HIGH_PREVIEW = 8;
 
-async function count(build: (q: any) => any): Promise<number> {
-  const { count } = await build(supabase.from("v_master").select("number", { count: "exact", head: true }));
-  return count ?? 0;
-}
-
 export function Dashboard({ ctx }: { ctx: ShellCtx }) {
-  const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
+  const [kpi, setKpi] = useState<{ active: number; new24: number; closed24: number } | null>(null);
   const [tally, setTally] = useState<{ open: number; filtered: number } | null>(null);
   const [todayHigh, setTodayHigh] = useState<(VMaster & { windowDupes: number })[]>([]);
   const [highExpanded, setHighExpanded] = useState(false);
@@ -30,79 +25,55 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
 
   useEffect(() => {
     (async () => {
-      const active = await count((q) => q.eq("is_active", true));
+      // Everything the dashboard needs in FIVE parallel requests. This used to be ~45
+      // sequential-ish ones — 28 of them a count-per-day for the intake chart — which
+      // measured 5.9s to full render. The DB answered each in ~50ms; the cost was the
+      // request count, so the aggregation moved into read-model views (schema v1.4).
       const since = new Date(Date.now() - 86400000).toISOString();
-      const { count: new24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("created_at", since);
-      const { count: closed24 } = await supabase.from("issues").select("number", { count: "exact", head: true }).gte("closed_at", since);
-      setKpi({ active, new24: new24 ?? 0, closed24: closed24 ?? 0 });
+      const [statsRes, themeRes, dailyRes, highRes, batchRes] = await Promise.all([
+        supabase.from("v_dashboard_stats").select("*").maybeSingle(),
+        supabase.from("v_theme_counts").select("*"),
+        supabase.from("v_daily_activity").select("*"),
+        supabase.from("v_master").select("*")
+          .gte("created_at", since).eq("state", "open").eq("priority", "H")
+          .order("final_rank_score", { ascending: false, nullsFirst: false }).limit(50),
+        supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(1),
+      ]);
 
-      // New High-priority arrivals over a rolling 24h, NOT a UTC calendar day. A UTC day
-      // empties out for the last hours of every US evening — the table read "none opened
-      // today" while 9 had been filed. Rolling also matches the New/Closed (24h) tiles.
-      const todaySince = since;
-      const { data: th } = await supabase
-        .from("v_master")
-        .select("*")
-        .gte("created_at", todaySince)
-        .eq("state", "open")
-        .eq("priority", "H")
-        .order("final_rank_score", { ascending: false, nullsFirst: false })
-        .limit(50);
+      const st = statsRes.data as Record<string, number> | null;
+      if (st) {
+        setKpi({ active: st.active, new24: st.new_24h, closed24: st.closed_24h });
+        setTally({ open: st.open_total, filtered: st.filtered_out });
+        setPrio({ H: st.prio_h, M: st.prio_m, L: st.prio_l });
+      }
+
+      // The view only returns themes that have issues; the bars still show all seven.
+      const counts = new Map((themeRes.data ?? []).map((r: any) => [r.theme, r.n as number]));
+      setThemes(Object.keys(THEME_NAMES)
+        .map((k) => [k, counts.get(k) ?? 0] as [string, number])
+        .sort((a, b) => b[1] - a[1]));
+
+      setTrend({
+        days: (dailyRes.data ?? []).map((r: any) =>
+          new Date(`${r.day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })),
+        opened: (dailyRes.data ?? []).map((r: any) => r.opened as number),
+        closed: (dailyRes.data ?? []).map((r: any) => r.closed as number),
+      });
+
       // Collapse duplicate reports to one row per cluster. The in-app bug reporter files
       // near-identical issues in bulk (12 copies of one rate-limit failure in a single day),
       // and each copy was taking its own High slot. The fetch is score-ordered, so the first
       // member seen is the best one; windowDupes = how many later rows folded into it.
       const byCluster = new Map<string | number, VMaster & { windowDupes: number }>();
-      for (const r of ((th as VMaster[]) ?? [])) {
+      for (const r of ((highRes.data as VMaster[]) ?? [])) {
         const key = r.cluster_id ?? `solo-${r.number}`;
         const hit = byCluster.get(key);
         if (hit) hit.windowDupes += 1;
         else byCluster.set(key, { ...r, windowDupes: 0 });
       }
       setTodayHigh(Array.from(byCluster.values()));
-      // Active is open MINUS ~3.4k label-filtered issues, so the headline never matches the
-      // repo's open count. The tile's sub-line carries the gap; the per-label breakdown lives
-      // in pipeline/config.yaml → eligibility.exclude_labels.
-      const [openTotal, filtered] = await Promise.all([
-        count((q) => q.eq("state", "open")),
-        count((q) => q.eq("state", "open").eq("eligible", false)),
-      ]);
-      setTally({ open: openTotal, filtered });
 
-      // Any kind — a catchup backfill changes classifications, so it is a data update too.
-      const { data: b } = await supabase.from("batches").select("*").order("started_at", { ascending: false }).limit(1);
-      setBatch(b ?? []);
-
-      const [H, M, L] = await Promise.all([
-        count((q) => q.eq("is_active", true).eq("priority", "H")),
-        count((q) => q.eq("is_active", true).eq("priority", "M")),
-        count((q) => q.eq("is_active", true).eq("priority", "L")),
-      ]);
-      setPrio({ H, M, L });
-
-      const themeCounts = await Promise.all(
-        Object.keys(THEME_NAMES).map(async (k) => [k, await count((q) => q.eq("is_active", true).eq("theme", k))] as [string, number])
-      );
-      setThemes(themeCounts.sort((a, b) => b[1] - a[1]));
-
-      // 14 complete UTC days, ending yesterday. The current day is deliberately excluded: it is
-      // always partial, and in the hours right after UTC midnight it is ~empty, which drew a
-      // cliff to zero that read as "intake collapsed". Today's numbers are the 24h KPI tiles.
-      const days: string[] = [], opened: number[] = [], closed: number[] = [];
-      const dayStart = (d: Date) => { const x = new Date(d); x.setUTCHours(0, 0, 0, 0); return x; };
-      const jobs: PromiseLike<void>[] = [];
-      for (let i = 14; i >= 1; i--) {
-        const d0 = dayStart(new Date(Date.now() - i * 86400000));
-        const d1 = new Date(d0.getTime() + 86400000);
-        const idx = 14 - i; // i=14 → 0 (oldest) … i=1 → 13 (yesterday)
-        days[idx] = d0.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-        jobs.push(
-          supabase.from("issues").select("number", { count: "exact", head: true }).gte("created_at", d0.toISOString()).lt("created_at", d1.toISOString()).then(({ count }) => { opened[idx] = count ?? 0; }),
-          supabase.from("issues").select("number", { count: "exact", head: true }).gte("closed_at", d0.toISOString()).lt("closed_at", d1.toISOString()).then(({ count }) => { closed[idx] = count ?? 0; })
-        );
-      }
-      await Promise.all(jobs);
-      setTrend({ opened, closed, days });
+      setBatch(batchRes.data ?? []);
     })();
   }, [version]);
 
@@ -116,17 +87,17 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
       </div>
       <div className="view-sub">
         {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} ·{" "}
-        {kpi.active.toLocaleString()} active issues in anthropics/claude-code
+        {kpi ? `${kpi.active.toLocaleString()} active issues in anthropics/claude-code` : "loading…"}
       </div>
 
       <div className="grid grid-kpi">
         <Tile
           label="Active issues"
-          value={kpi.active.toLocaleString()}
+          value={kpi ? kpi.active.toLocaleString() : "—"}
           sub={tally ? `of ${tally.open.toLocaleString()} open · ${tally.filtered.toLocaleString()} filtered` : "open & eligible"}
         />
-        <Tile label="New issues (24h)" value={kpi.new24.toLocaleString()} sub="created in the last day" />
-        <Tile label="Closed (24h)" value={kpi.closed24.toLocaleString()} sub="closed in the last day" />
+        <Tile label="New issues (24h)" value={kpi ? kpi.new24.toLocaleString() : "—"} sub="created in the last day" />
+        <Tile label="Closed (24h)" value={kpi ? kpi.closed24.toLocaleString() : "—"} sub="closed in the last day" />
         {/* Batch id / kind is ops detail — it lives in Batches & ops, not here. */}
         <Tile
           label="Last update"
