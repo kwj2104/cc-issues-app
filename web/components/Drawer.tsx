@@ -14,7 +14,7 @@ const VERIFY_COPY: Record<string, { pill: string; cls: string; text: string }> =
   corroborated: {
     pill: "✓ corroborated",
     cls: "corr",
-    text: "Confirmed and corroborated by breadth — a duplicate cluster and/or top age-band engagement back the rating.",
+    text: "Confirmed and corroborated by breadth — duplicate reports and/or top age-band engagement back the rating.",
   },
   "class-solo": {
     pill: "◇ lead · solo",
@@ -44,7 +44,7 @@ function Verification({ row }: { row: VMaster }) {
         </div>
       ) : (
         <div className="verify-reason" style={{ marginTop: 0 }}>
-          Single-pass rating — re-verifies automatically if its cluster grows or engagement crosses the
+          Single-pass rating — re-verifies automatically if its duplicate count grows or engagement crosses the
           next age-band decile.
         </div>
       )}
@@ -121,14 +121,14 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
                 <div className="sig"><b>{fmtK(row.comments)}</b><span>comments</span></div>
                 <div className="sig"><b>{(row.f_velocity ?? 0).toFixed(1)}</b><span>velocity term</span></div>
                 <div className="sig"><b>{fmtAge(row.age_days)}</b><span>age</span></div>
-                <div className="sig"><b>{(row.cluster_size ?? 1) > 1 ? "×" + row.cluster_size : "1"}</b><span>cluster size</span></div>
+                <div className="sig"><b>{Math.max(0, (row.cluster_size ?? 1) - 1)}</b><span>duplicates</span></div>
                 <div className="sig"><b>{closed ? "closed" : "active"}</b><span>{closed ? row.state_reason ?? "closed" : "status"}</span></div>
               </div>
             </div>
 
             {members.length > 0 && (
               <div className="d-sec">
-                <div className="d-label">Cluster members</div>
+                <div className="d-label">Duplicates</div>
                 <div className="cluster-chips">
                   {members.map((m) => <span key={m} className="cchip">#{m}</span>)}
                   {(row.cluster_size ?? 1) - 1 > members.length && <span className="cchip" style={{ borderStyle: "dashed" }}>+{(row.cluster_size ?? 1) - 1 - members.length} more</span>}

@@ -19,7 +19,7 @@ const LANES = [
   {
     basis: "corroborated",
     title: "Corroborated",
-    blurb: "breadth-backed — duplicate cluster and/or top age-band engagement · escalate directly",
+    blurb: "breadth-backed — duplicate reports and/or top age-band engagement · escalate directly",
   },
   {
     basis: "class-solo",
@@ -153,7 +153,7 @@ function NotableCard({ row: i, ctx, note }: { row: Row; ctx: ShellCtx; note: str
           <span className="t-num mono">#{i.number}</span>
           {i.theme && <span className="tag theme-t">{themeLabel(i.theme)}</span>}
           {i.area && <span className="tag">{i.area}</span>}
-          <span>{(i.cluster_size ?? 1) > 1 ? `cluster ×${i.cluster_size}` : "singleton"}</span>
+          <span>{(i.cluster_size ?? 1) > 1 ? `${(i.cluster_size ?? 1) - 1} duplicates` : "no duplicates"}</span>
           {/* Both off created_at/updated_at and the live clock. age_days is a stored feature
               recomputed nightly, so pairing it with a live relDays() drew "opened 29d ago ·
               updated 30d ago" — an issue updated before it was filed. */}

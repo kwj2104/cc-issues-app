@@ -20,7 +20,8 @@ adversarial pass** over anything it called High. The dashboard reads the result.
 Two things follow from that design and are worth internalising:
 
 - **The ranking is mostly arithmetic, not opinion.** Reactions, comments, velocity, severity
-  keywords, duplicate-cluster size. The model's judgement is one weighted input, not the
+  keywords, how many duplicate reports exist. The model's judgement is one weighted input,
+  not the
   whole answer.
 - **Nothing is ever deleted or overwritten destructively.** Every run is a re-runnable
   upsert, so a failed run leaves the data consistent and the next run absorbs the gap.
@@ -38,7 +39,7 @@ Two things follow from that design and are worth internalising:
 | **Batches & ops** | Is the pipeline actually healthy? Run history, failures, classification-quality samples. |
 
 Click any row anywhere to open the detail drawer: the model's summary, the verification
-basis, raw signals, duplicate-cluster members, and the live issue body fetched from GitHub.
+basis, raw signals, duplicate reports, and the live issue body fetched from GitHub.
 
 ---
 
@@ -53,9 +54,8 @@ The dashboard's headline count is **active**, which is *open **and** eligible* �
 
 The tile spells the gap out beneath the number — `of N open · M filtered` — so it can't be
 mistaken for GitHub's count. **A `stale`-labelled issue with 10+ reactions is rescued back
-in** — the
-stale bot labels on inactivity, not on whether the problem is fixed, and a well-supported
-issue shouldn't disappear because nobody commented for 60 days.
+in** — the stale bot labels on inactivity, not on whether the problem is fixed, and a
+well-supported issue shouldn't disappear because nobody commented for 60 days.
 
 ### Priority, and what "Verified High" adds
 
@@ -74,7 +74,7 @@ that mean different things:
 ### Two different scores
 
 - **Retrieval score** — the deterministic signal. Engagement velocity × severity × duplicate
-  mass. No model involved.
+  count. No model involved.
 - **Rank score** — retrieval blended with the model's priority judgement.
 
 Sort by retrieval score when you want to know what the *crowd* is telling you; sort by
@@ -101,7 +101,7 @@ from the classifier, not missing data.
 |---|---|---|
 | **Sync** | every 2 hours | Pulls changed issues, scores, classifies new arrivals, verifies Highs. |
 | **Catch-up** | 6× daily | Works through the backlog of never-classified issues, highest-value first. |
-| **Nightly** | daily | Recomputes ages, re-clusters duplicates; Sundays, samples classifications for a quality check. |
+| **Nightly** | daily | Recomputes ages, re-matches duplicates; Sundays, samples classifications for a quality check. |
 
 The dashboard refreshes itself when a job lands — an open tab updates in place, no reload.
 
@@ -121,8 +121,8 @@ The dashboard refreshes itself when a job lands — an open tab updates in place
   and reasoning so you can disagree with it.
 - **Today's intake is partial.** The intake-vs-closes chart plots complete UTC days only —
   today's numbers are the 24-hour KPI tiles instead, because a partial day plots as a cliff.
-- **Duplicate clusters are approximate.** Text similarity, recomputed nightly. Between
-  recomputes, new issues get a provisional assignment that may shift.
+- **Duplicate detection is approximate.** Text similarity, recomputed nightly. Between
+  recomputes, a new issue gets a provisional match that may shift.
 
 ---
 
