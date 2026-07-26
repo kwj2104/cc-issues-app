@@ -90,9 +90,6 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
             <div className="d-meta">
               <span>first seen {fmtAge(row.age_days)} ago</span>
               {closed && <span>closed {relDays(row.closed_at)} ago</span>}
-              <span>rubric {row.rubric_version ?? "v2.0"}</span>
-              <span>model: {row.model ?? "—"}</span>
-              <span>{row.batch_id ? "classified in batch #" + row.batch_id : row.analysis_source === "seed-review" ? "imported from seed review" : "not yet classified"}</span>
             </div>
           </div>
         </>
