@@ -8,6 +8,7 @@ import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { relDays, timeET } from "@/lib/format";
 import { PriorityPill } from "../ui";
 import type { ShellCtx } from "../AppShell";
+import { IconStack } from "../Icons";
 
 type Row = VMaster & { batch_started_at: string };
 
@@ -93,7 +94,7 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
 
 function NotableCard({ row: i, ctx }: { row: Row; ctx: ShellCtx }) {
   return (
-    <div className="card nn-card" onClick={() => ctx.openDrawer(i)} style={{ cursor: "pointer" }}>
+    <div className={`card nn-card${(i.cluster_size ?? 1) > 1 ? " stacked" : ""}`} onClick={() => ctx.openDrawer(i)} style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-start" }}>
         <PriorityPill priority={i.priority} />
       </div>
@@ -103,7 +104,11 @@ function NotableCard({ row: i, ctx }: { row: Row; ctx: ShellCtx }) {
           <span className="t-num mono">#{i.number}</span>
           {i.theme && <span className="tag theme-t">{themeLabel(i.theme)}</span>}
           {i.area && <span className="tag">{i.area}</span>}
-          <span>{(i.cluster_size ?? 1) > 1 ? `${(i.cluster_size ?? 1) - 1} duplicates` : "no duplicates"}</span>
+          {(i.cluster_size ?? 1) > 1 && (
+            <span className="pill dupes" title={`${(i.cluster_size ?? 1) - 1} duplicate reports — collapsed to one card`}>
+              <IconStack />{(i.cluster_size ?? 1) - 1}
+            </span>
+          )}
           {/* Both off created_at/updated_at and the live clock. age_days is a stored feature
               recomputed nightly, so pairing it with a live relDays() drew "opened 29d ago ·
               updated 30d ago" — an issue updated before it was filed. */}

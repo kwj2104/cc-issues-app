@@ -7,6 +7,7 @@ import type { VMaster } from "@/lib/types";
 import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { fmtK, relTime, stampET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
+import { IconStack } from "../Icons";
 
 // Show a short list by default; the rest is one click away rather than a wall of rows.
 const HIGH_PREVIEW = 8;
@@ -162,8 +163,20 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
                   <tr key={r.number} onClick={() => ctx.openDrawer(r)}>
                     <td className="t-num">#{r.number}</td>
                     <td className="t-title">
-                      {r.title}
-                      {r.windowDupes > 0 && <span className="tag">+{r.windowDupes} duplicate{r.windowDupes === 1 ? "" : "s"} in 24h</span>}
+                      <div className="title-flex">
+                      <span className="title-text">{r.title}</span>
+                      {(r.cluster_size ?? 1) > 1 && (
+                        <span
+                          className="pill dupes"
+                          title={
+                            `${(r.cluster_size ?? 1) - 1} duplicate reports of this issue` +
+                            (r.windowDupes > 0 ? ` · ${r.windowDupes + 1} filed in the last 24h, collapsed into this row` : "")
+                          }
+                        >
+                          <IconStack />{(r.cluster_size ?? 1) - 1}
+                        </span>
+                      )}
+                      </div>
                     </td>
                     <td><span className="tag">{r.area ?? "—"}</span></td>
                     <td>{r.theme ? <span className="tag theme-t">{themeLabel(r.theme)}</span> : <span className="tag">—</span>}</td>

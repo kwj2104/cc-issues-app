@@ -11,6 +11,14 @@ export const Starburst = (p: P) => (
   </svg>
 );
 
+// Two overlapping sheets — the universal "there are copies of this" glyph.
+export const IconStack = (p: P) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <rect x="8.5" y="8.5" width="12" height="12" rx="2.5" />
+    <path d="M15.5 4.5h-9a2 2 0 0 0-2 2v9" />
+  </svg>
+);
+
 export const IconMenu = (p: P) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" {...p}>
     <path d="M4 6.5h16M4 12h16M4 17.5h16" />
