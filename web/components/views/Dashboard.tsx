@@ -5,8 +5,11 @@ import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES, themeLabel } from "@/lib/types";
-import { fmtK, timeET } from "@/lib/format";
+import { fmtK, relTime, stampET, timeET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
+
+// Show a short list by default; the rest is one click away rather than a wall of rows.
+const HIGH_PREVIEW = 8;
 
 async function count(build: (q: any) => any): Promise<number> {
   const { count } = await build(supabase.from("v_master").select("number", { count: "exact", head: true }));
@@ -17,6 +20,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
   const [tally, setTally] = useState<{ open: number; filtered: number } | null>(null);
   const [todayHigh, setTodayHigh] = useState<VMaster[]>([]);
+  const [highExpanded, setHighExpanded] = useState(false);
   const [batch, setBatch] = useState<any>(null);
   const version = useDataVersion();
   const [prio, setPrio] = useState<{ H: number; M: number; L: number }>({ H: 0, M: 0, L: 0 });
@@ -42,7 +46,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         .eq("state", "open")
         .eq("priority", "H")
         .order("final_rank_score", { ascending: false, nullsFirst: false })
-        .limit(12);
+        .limit(50);
       setTodayHigh((th as VMaster[]) ?? []);
       // Active is open MINUS ~3.4k label-filtered issues, so the headline never matches the
       // repo's open count. The tile's sub-line carries the gap; the per-label breakdown lives
@@ -137,23 +141,33 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
                 <tr>
                   <th>#</th><th>Title</th><th>Area</th><th>Theme</th>
                   <th style={{ textAlign: "right" }}>Reacts</th>
+                  <th style={{ textAlign: "right" }} title="When the issue last saw activity — GitHub updated_at. Times are ET.">Last activity</th>
                   <th style={{ textAlign: "right" }}>Score</th>
                 </tr>
               </thead>
               <tbody>
-                {todayHigh.map((r) => (
+                {(highExpanded ? todayHigh : todayHigh.slice(0, HIGH_PREVIEW)).map((r) => (
                   <tr key={r.number} onClick={() => ctx.openDrawer(r)}>
                     <td className="t-num">#{r.number}</td>
                     <td className="t-title">{r.title}</td>
                     <td><span className="tag">{r.area ?? "—"}</span></td>
                     <td>{r.theme ? <span className="tag theme-t">{themeLabel(r.theme)}</span> : <span className="tag">—</span>}</td>
                     <td className="t-r">{fmtK(r.reactions_total)}</td>
+                    <td className="t-r">
+                      <div>{relTime(r.updated_at)}</div>
+                      <div className="act-abs">{stampET(r.updated_at)}</div>
+                    </td>
                     <td className="t-r">{Math.round(r.final_rank_score ?? r.retrieval_score ?? 0)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+        {todayHigh.length > HIGH_PREVIEW && (
+          <button className="btn btn-sm" style={{ marginTop: 12 }} onClick={() => setHighExpanded((v) => !v)}>
+            {highExpanded ? "Show fewer" : `Show all ${todayHigh.length} →`}
+          </button>
         )}
       </div>
 

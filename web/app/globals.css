@@ -270,7 +270,7 @@ table.master{width:100%;border-collapse:collapse;min-width:960px}
 .verify-reason{font-size:12.5px;line-height:1.55;color:var(--text-2);margin-top:6px}
 
 /* today's new-High table sits inside a card, so it needs no min-width scroll floor */
-table.master.today-high{min-width:640px}
+table.master.today-high{min-width:780px}
 
 /* ---------- themes ---------- */
 /* Every flex/grid child on this screen needs an explicit min-width:0 — the issue titles are
