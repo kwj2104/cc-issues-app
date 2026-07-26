@@ -7,7 +7,6 @@ import type { VMaster } from "@/lib/types";
 import { THEME_NAMES, themeLabel } from "@/lib/types";
 import { fmtK, timeET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
-import { Starburst } from "../Icons";
 
 async function count(build: (q: any) => any): Promise<number> {
   const { count } = await build(supabase.from("v_master").select("number", { count: "exact", head: true }));
@@ -97,7 +96,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   return (
     <section className="view">
       <div className="greet">
-        <Starburst />
+        <img className="greet-mark" src="/clawdpixel.svg" alt="" />
         <h1 className="display">Claude Code GitHub Issues Dashboard</h1>
       </div>
       <div className="view-sub">

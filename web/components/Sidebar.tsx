@@ -2,7 +2,7 @@
 
 import type { ViewKey } from "./AppShell";
 import {
-  Starburst, IconDash, IconNotable, IconMaster, IconThemes, IconOps, IconSun, IconMoon,
+  IconDash, IconNotable, IconMaster, IconThemes, IconOps, IconSun, IconMoon,
 } from "./Icons";
 
 const NAV: { key: ViewKey; label: string; Icon: (p: any) => JSX.Element }[] = [
@@ -25,7 +25,7 @@ export function Sidebar({
   return (
     <aside className={`sidebar${open ? " open" : ""}`}>
       <div className="logo-row">
-        <Starburst className="logo-mark" />
+        <img className="logo-mark" src="/clawdpixel.svg" alt="" />
         <span className="logo-name">Claude Code</span>
         <span className="logo-sub">INTERNAL</span>
       </div>

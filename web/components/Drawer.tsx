@@ -8,15 +8,6 @@ import { fmtK, fmtAge, relDays } from "@/lib/format";
 import { PriorityPill } from "./ui";
 import { IconClose, IconExternal } from "./Icons";
 
-// Illustrative 0-100 normalization of the four blend components (exact weights in pipeline
-// config; population-normalized components are computed server-side at blend time).
-const comps = (r: VMaster) => [
-  ["LLM priority", Math.round(r.priority_score ?? 0), 0.45],
-  ["Engagement rate", Math.min(100, Math.round(((r.rate_score ?? 0) / 40) * 100)), 0.25],
-  ["Severity signals", Math.min(100, Math.round(((r.f_severity ?? 0) / 5) * 100)), 0.2],
-  ["Cluster mass", Math.min(100, Math.round((Math.log2(Math.max(1, r.cluster_size ?? 1)) / Math.log2(140)) * 100)), 0.1],
-] as const;
-
 // Basis-keyed copy, not a per-issue string: the schema has no verify_reason column yet, so
 // anything issue-specific here would be invented.
 const VERIFY_COPY: Record<string, { pill: string; cls: string; text: string }> = {
@@ -87,7 +78,6 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
       .catch(() => setBody(""));
   }, [row]);
 
-  const score = Math.round((row?.final_rank_score ?? row?.retrieval_score ?? 0));
   const closed = row?.state === "closed";
 
   return (
@@ -135,18 +125,6 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
 
             <Verification row={row} />
 
-
-            <div className="d-sec">
-              <div className="d-label">Score decomposition · rank {score}</div>
-              {comps(row).map(([name, v, w]) => (
-                <div className="comp-row" key={name}>
-                  <span className="comp-name">{name} <span style={{ color: "var(--micro)" }}>× {w}</span></span>
-                  <div className="comp-track"><i style={{ width: `${v}%` }} /></div>
-                  <span className="comp-val">{v}</span>
-                </div>
-              ))}
-              <div style={{ fontSize: 11, color: "var(--micro)", marginTop: 6 }}>Deterministic components recomputed nightly · weights in pipeline config</div>
-            </div>
 
             <div className="d-sec">
               <div className="d-label">Signals</div>
