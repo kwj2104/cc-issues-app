@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useDataVersion } from "@/lib/refresh";
 import type { VMaster } from "@/lib/types";
 import { THEME_NAMES, themeLabel } from "@/lib/types";
-import { fmtK, relTime, stampET, timeET } from "@/lib/format";
+import { fmtK, relTime, stampET } from "@/lib/format";
 import type { ShellCtx } from "../AppShell";
 
 // Show a short list by default; the rest is one click away rather than a wall of rows.
@@ -118,7 +118,8 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         {/* Batch id / kind is ops detail — it lives in Batches & ops, not here. */}
         <Tile
           label="Last update"
-          value={batch?.[0] ? timeET(batch[0].started_at) : "—"}
+          small
+          value={batch?.[0] ? stampET(batch[0].started_at) : "—"}
           sub={batch?.[0] && batch[0].status !== "ok" ? `last run ${batch[0].status}` : "data refreshed"}
         />
       </div>
@@ -201,11 +202,11 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   );
 }
 
-function Tile({ label, value, sub, ok }: { label: string; value: string; sub?: string; ok?: string }) {
+function Tile({ label, value, sub, ok, small }: { label: string; value: string; sub?: string; ok?: string; small?: boolean }) {
   return (
     <div className="card tile">
       <span className="tile-label">{label}</span>
-      <span className="tile-value">{value}</span>
+      <span className="tile-value" style={small ? { fontSize: 19 } : undefined}>{value}</span>
       {ok ? <span className="tile-ok"><span className="sync-dot" />{ok}</span> : <span className="tile-delta"><span style={{ color: "var(--text-3)" }}>{sub}</span></span>}
     </div>
   );
