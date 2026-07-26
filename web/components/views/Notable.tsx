@@ -11,23 +11,6 @@ import type { ShellCtx } from "../AppShell";
 
 type Row = VMaster & { batch_started_at: string };
 
-// The verify pass confirms on two different grounds, and they mean different things to whoever
-// works the queue: breadth-backed confirms are ready to escalate, single-report confirms of a
-// severe class are leads to investigate (the lane is deliberately permissive, so some are false
-// positives by design). Splitting them here is what keeps that distinction from being lost.
-const LANES = [
-  {
-    basis: "corroborated",
-    title: "Corroborated",
-    blurb: "breadth-backed — duplicate reports and/or top age-band engagement · escalate directly",
-  },
-  {
-    basis: "class-solo",
-    title: "Leads · solo report",
-    blurb: "one credible report of a data-loss / security / consent / billing defect · investigate before escalating",
-  },
-] as const;
-
 // Batches group by *when the classifier first looked at an issue*, not by when the issue was
 // filed — so an issue opened months ago lands in today's batch. Why it landed there depends on
 // the batch kind, and that is the difference between "this changed today" and "we finally got
@@ -57,10 +40,6 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
   }, [version]);
 
   const groups = Array.from(new Set(rows.map((r) => r.batch_id)));
-  const totals = {
-    corr: rows.filter((r) => r.verify_basis === "corroborated").length,
-    solo: rows.filter((r) => r.verify_basis === "class-solo").length,
-  };
 
   return (
     <section className="view">
@@ -69,7 +48,7 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
       </div>
       <div className="toolbar">
         <span className="toolbar-meta">
-          {totals.corr} corroborated · {totals.solo} lead{totals.solo === 1 ? "" : "s"} across{" "}
+          {rows.length} issue{rows.length === 1 ? "" : "s"} across{" "}
           {new Set(rows.map((r) => r.batch_id)).size} batches
         </span>
       </div>
@@ -77,21 +56,13 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
       {loading && <div className="card card-pad skeleton">Loading queue…</div>}
       {!loading && rows.length === 0 && (
         <div className="card card-pad" style={{ textAlign: "center", color: "var(--text-3)" }}>
-          Nothing here yet — corroborated confirms and solo-report leads appear as the sync classifies
-          new arrivals.
+          Nothing here yet — issues appear as the sync classifies new arrivals.
         </div>
       )}
 
       {groups.map((bid) => {
         const items = rows.filter((r) => r.batch_id === bid);
         if (!items.length) return null;
-
-        const lanes = LANES.map((l) => ({ ...l, items: items.filter((i) => i.verify_basis === l.basis) }));
-        const placed = lanes.reduce((n, l) => n + l.items.length, 0);
-        // Older rows predate verify_basis — fall back to the flat list rather than hiding them.
-        const unlaned = items.filter((i) => i.verify_basis !== "corroborated" && i.verify_basis !== "class-solo");
-        const corrN = lanes[0].items.length;
-        const soloN = lanes[1].items.length;
 
         return (
           <div className="batch-group" key={bid}>
@@ -100,28 +71,10 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
               <span>{timeET(items[0].batch_started_at)}</span>
               {kinds[bid as number] && <span>· {BATCH_KIND_NOTE[kinds[bid as number]] ?? kinds[bid as number]}</span>}
               <span className="rule" />
-              <span>
-                {placed === 0
-                  ? `${items.length} verified High`
-                  : `${corrN} corroborated · ${soloN} lead${soloN === 1 ? "" : "s"}`}
-              </span>
+              <span>{items.length} issue{items.length === 1 ? "" : "s"}</span>
             </div>
 
-            {lanes.map((lane) =>
-              lane.items.length === 0 ? null : (
-                <div key={lane.basis}>
-                  <div className="nn-lane-h">
-                    <b style={{ color: "var(--text-2)" }}>{lane.title}</b>
-                    <span>· {lane.blurb}</span>
-                  </div>
-                  {lane.items.map((i) => (
-                    <NotableCard key={i.number} row={i} ctx={ctx} />
-                  ))}
-                </div>
-              )
-            )}
-
-            {unlaned.map((i) => <NotableCard key={i.number} row={i} ctx={ctx} />)}
+            {items.map((i) => <NotableCard key={i.number} row={i} ctx={ctx} />)}
           </div>
         );
       })}

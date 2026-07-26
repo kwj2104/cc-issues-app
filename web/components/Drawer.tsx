@@ -54,9 +54,7 @@ export function Drawer({ row, onClose }: { row: VMaster | null; onClose: () => v
           <div className="drawer-body">
             {row.summary && (
               <div className="d-sec">
-                <div className="d-label">
-                  Summary <span style={{ fontWeight: 500, letterSpacing: 0, textTransform: "none" }}>· {row.model ?? "Sonnet"}, {row.batch_id ? "batch #" + row.batch_id : "seed review"}</span>
-                </div>
+                <div className="d-label">Summary</div>
                 <div className="d-summary">{row.summary}</div>
               </div>
             )}
