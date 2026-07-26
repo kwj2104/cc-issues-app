@@ -19,7 +19,7 @@ async function count(build: (q: any) => any): Promise<number> {
 export function Dashboard({ ctx }: { ctx: ShellCtx }) {
   const [kpi, setKpi] = useState({ active: 0, new24: 0, closed24: 0 });
   const [tally, setTally] = useState<{ open: number; filtered: number } | null>(null);
-  const [todayHigh, setTodayHigh] = useState<VMaster[]>([]);
+  const [todayHigh, setTodayHigh] = useState<(VMaster & { windowDupes: number })[]>([]);
   const [highExpanded, setHighExpanded] = useState(false);
   const [batch, setBatch] = useState<any>(null);
   const version = useDataVersion();
@@ -47,7 +47,18 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         .eq("priority", "H")
         .order("final_rank_score", { ascending: false, nullsFirst: false })
         .limit(50);
-      setTodayHigh((th as VMaster[]) ?? []);
+      // Collapse duplicate reports to one row per cluster. The in-app bug reporter files
+      // near-identical issues in bulk (12 copies of one rate-limit failure in a single day),
+      // and each copy was taking its own High slot. The fetch is score-ordered, so the first
+      // member seen is the best one; windowDupes = how many later rows folded into it.
+      const byCluster = new Map<string | number, VMaster & { windowDupes: number }>();
+      for (const r of ((th as VMaster[]) ?? [])) {
+        const key = r.cluster_id ?? `solo-${r.number}`;
+        const hit = byCluster.get(key);
+        if (hit) hit.windowDupes += 1;
+        else byCluster.set(key, { ...r, windowDupes: 0 });
+      }
+      setTodayHigh(Array.from(byCluster.values()));
       // Active is open MINUS ~3.4k label-filtered issues, so the headline never matches the
       // repo's open count. The tile's sub-line carries the gap; the per-label breakdown lives
       // in pipeline/config.yaml → eligibility.exclude_labels.
@@ -128,7 +139,7 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
         <div className="card-head">
           <div>
             <div className="card-title">New High priority · last 24 hours</div>
-            <div className="card-sub">Filed in the last 24 hours and still open</div>
+            <div className="card-sub">Filed in the last 24 hours and still open · duplicate reports collapsed into one row</div>
           </div>
         </div>
         {todayHigh.length === 0 ? (
@@ -150,7 +161,10 @@ export function Dashboard({ ctx }: { ctx: ShellCtx }) {
                 {(highExpanded ? todayHigh : todayHigh.slice(0, HIGH_PREVIEW)).map((r) => (
                   <tr key={r.number} onClick={() => ctx.openDrawer(r)}>
                     <td className="t-num">#{r.number}</td>
-                    <td className="t-title">{r.title}</td>
+                    <td className="t-title">
+                      {r.title}
+                      {r.windowDupes > 0 && <span className="tag">+{r.windowDupes} duplicate{r.windowDupes === 1 ? "" : "s"} in 24h</span>}
+                    </td>
                     <td><span className="tag">{r.area ?? "—"}</span></td>
                     <td>{r.theme ? <span className="tag theme-t">{themeLabel(r.theme)}</span> : <span className="tag">—</span>}</td>
                     <td className="t-r">{fmtK(r.reactions_total)}</td>

@@ -123,6 +123,13 @@ The dashboard refreshes itself when a job lands — an open tab updates in place
   today's numbers are the 24-hour KPI tiles instead, because a partial day plots as a cliff.
 - **Duplicate detection is approximate.** Text similarity, recomputed nightly. Between
   recomputes, a new issue gets a provisional match that may shift.
+- **Auto-filed reports inflate breadth.** Claude Code's in-app bug reporter files
+  near-identical issues in bulk (~3,400 to date). Each copy raises its cluster's duplicate
+  count, which feeds both the retrieval score and the verify pass's corroboration evidence —
+  so a widely *occurring* failure can rank as widely *cared-about* with zero human
+  engagement. The dashboard and New & Notable collapse duplicates to one row per problem;
+  the scoring itself still counts every copy. Whether it should is an open product question,
+  deliberately not patched quietly.
 
 ---
 

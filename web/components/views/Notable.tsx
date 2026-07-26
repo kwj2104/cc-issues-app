@@ -30,7 +30,16 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
 
   useEffect(() => {
     supabase.from("v_new_high").select("*").limit(200).then(({ data }) => {
-      setRows((data as Row[]) ?? []);
+      // One card per duplicate cluster across the whole queue. Without this, a single
+      // bot-filed failure cluster held 72 of the 200 cards — a third of the read-first
+      // queue was one problem. The view is ordered newest batch first, best score first,
+      // so keeping the first occurrence keeps the most current, strongest member.
+      const seen = new Map<string | number, Row>();
+      for (const r of ((data as Row[]) ?? [])) {
+        const key = r.cluster_id ?? `solo-${r.number}`;
+        if (!seen.has(key)) seen.set(key, r);
+      }
+      setRows(Array.from(seen.values()));
       setLoading(false);
     });
     // v_new_high carries the batch's start time but not its kind; fetch it so each group can
@@ -49,7 +58,7 @@ export function Notable({ ctx }: { ctx: ShellCtx }) {
       <div className="toolbar">
         <span className="toolbar-meta">
           {rows.length} issue{rows.length === 1 ? "" : "s"} across{" "}
-          {new Set(rows.map((r) => r.batch_id)).size} batches
+          {new Set(rows.map((r) => r.batch_id)).size} batches · duplicates collapsed
         </span>
       </div>
 
