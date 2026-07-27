@@ -27,7 +27,7 @@ export function Sidebar({
       <div className="logo-row">
         <img className="logo-mark" src="/clawdpixel.svg" alt="" />
         <span className="logo-name">Claude Code</span>
-        <span className="logo-sub">INTERNAL</span>
+        <span className="logo-sub">DEMO</span>
       </div>
       <div className="nav-label" style={{ paddingTop: 4 }}>ISSUE TRACKER</div>
       {NAV.map(({ key, label, Icon }) => (

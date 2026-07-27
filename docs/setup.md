@@ -1,6 +1,7 @@
 # Setup runbook — Claude Code Issue Tracker
 
-Internal tracker for the `anthropics/claude-code` backlog: deterministic retrieval + Claude
+Demo prototype (unofficial, not affiliated with Anthropic) over the public
+`anthropics/claude-code` backlog: deterministic retrieval + Claude
 classification every 2 hours (billed to your Max subscription, running on GitHub's cloud) +
 a claude.ai-styled dashboard on Vercel. Infra cost: **$0/month** on free tiers.
 

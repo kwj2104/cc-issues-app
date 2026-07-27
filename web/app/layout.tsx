@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Claude Code · Issue Tracker",
-  description: "Internal tracker for the anthropics/claude-code issue backlog.",
+  description: "Unofficial demo dashboard over the public anthropics/claude-code issue backlog. Not affiliated with Anthropic.",
 };
 
 // Explicit rather than relying on the framework default — the app is a fixed-height shell,
