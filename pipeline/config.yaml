@@ -48,13 +48,7 @@ classifier:
   verify_version: v1.2                       # v1.0 starved → v1.1 overcorrected → v1.2 veto+credibility
   batch_size: 20                # issues per classify call
   verify_threshold: 70          # first-pass H or score ≥ this → adversarial second pass
-  catchup_per_run: 400          # backlog cap per run — was 150, but the time budget cut
-                                # runs off at ~60; with parallel verify the cap binds again.
-  verify_concurrency: 4         # verify is one call per candidate and ~85% of a run's calls;
-                                # they're independent and touch no DB, so they run in parallel.
-                                # Raise for throughput, lower if the subscription rate-limits.
-  catchup_budget_s: 2100        # catchup owns a 45-min job window and was using ~12 of it. Sync
-                                # can't have this — it must fit a delta crawl into 30 min too.
+  catchup_per_run: 150          # backlog classification cap per scheduled run
   classify_budget_s: 600        # wall-clock budget for the classify phase of one sync. The count
                                 # caps below bound the work; this bounds the TIME, which is what
                                 # the job timeout actually kills on — and a killed job rolls the

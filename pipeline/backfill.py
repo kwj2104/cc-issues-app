@@ -278,8 +278,7 @@ def run_catchup(limit: int | None = None, gha_run_url: str | None = None) -> dic
         ctx = evidence.EvidenceContext(conn, cfg)
         norms = blend.population_norms(conn)
         classified, new_high = sync.process_queue(
-            conn, queue, cfg, batch_id, ctx, norms, source="backfill", tag="catchup",
-            budget_s=cfg["classifier"].get("catchup_budget_s"),
+            conn, queue, cfg, batch_id, ctx, norms, source="backfill", tag="catchup"
         )
         db.finish_batch(conn, batch_id, status="ok", issues_seen=len(queue),
                         classified_count=classified, new_high_count=new_high)

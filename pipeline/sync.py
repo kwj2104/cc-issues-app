@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
@@ -202,19 +201,14 @@ def _blend_inputs(conn, numbers: list[int]) -> dict[int, tuple[float, float]]:
 
 def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
                   ctx: evidence.EvidenceContext, norms: dict[str, float], *,
-                  source: str, tag: str = "sync", budget_s: float | None = None) -> tuple[int, int]:
+                  source: str, tag: str = "sync") -> tuple[int, int]:
     """Classify → verify (H/≥70) → blend → upsert analysis, in batches. Shared by sync + catchup.
-
-    `budget_s` overrides classifier.classify_budget_s — catchup gets a much larger one, since
-    it owns a 45-minute job window while a sync also has to fit a delta crawl into 30.
 
     Returns (classified_count, verified_high_count).
     """
     batch_size = cfg["classifier"]["batch_size"]
     max_consecutive = cfg["classifier"].get("max_consecutive_failures", 3)
-    workers = max(1, int(cfg["classifier"].get("verify_concurrency", 1)))
-    if budget_s is None:
-        budget_s = cfg["classifier"].get("classify_budget_s")
+    budget_s = cfg["classifier"].get("classify_budget_s")
     deadline = (time.monotonic() + budget_s) if budget_s else None
     classified = new_high = skipped = 0
     consecutive = 0
@@ -255,31 +249,6 @@ def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
             continue
         consecutive = 0
 
-        # Verify is one call per candidate and typically ~85% of a run's subprocess calls,
-        # so it, not classification, sets the pace. The calls are independent and touch no
-        # DB connection, so they run concurrently — same prompts, same verdicts, same
-        # per-candidate error handling, just without waiting in line. All connection work
-        # (ctx.enrich) stays on this thread: psycopg connections are not thread-safe.
-        candidates = [c for c in classifications
-                      if dmap.get(c["number"]) and verify.needs_verification(c, cfg)]
-        evidence_by_num = {c["number"]: ctx.enrich(c["number"]) for c in candidates}
-        verdicts: dict[int, Any] = {}
-        verify_errors: dict[int, str] = {}
-
-        def _verify(cls_obj):
-            num = cls_obj["number"]
-            return num, verify.verify_one(dmap[num], cls_obj, cfg,
-                                          evidence=evidence_by_num[num])
-
-        if candidates:
-            with ThreadPoolExecutor(max_workers=min(workers, len(candidates))) as pool:
-                for cand, fut in [(c, pool.submit(_verify, c)) for c in candidates]:
-                    try:
-                        num, (verdict, _) = fut.result()
-                        verdicts[num] = verdict
-                    except Exception as exc:
-                        verify_errors[cand["number"]] = type(exc).__name__
-
         rows = []
         for cls in classifications:
             num = cls["number"]
@@ -289,15 +258,16 @@ def process_queue(conn, queue: list[int], cfg: dict[str, Any], batch_id: int,
             verdict = None
             ev = None
             if verify.needs_verification(cls, cfg):
-                if num in verify_errors:
+                ev = ctx.enrich(num)
+                try:
+                    verdict, _ = verify.verify_one(digest, cls, cfg, evidence=ev)
+                except Exception as exc:
                     # Writing the row unverified would strand it: nothing re-queues an issue
                     # whose analysis exists and whose updated_at hasn't moved. Leave it with no
                     # analysis row so it stays pending and gets a full classify+verify later.
                     skipped += 1
-                    print(f"[{tag}] verify failed for #{num} ({verify_errors[num]}); left pending")
+                    print(f"[{tag}] verify failed for #{num} ({type(exc).__name__}); left pending")
                     continue
-                ev = evidence_by_num[num]
-                verdict = verdicts[num]
                 # snapshot for the re-verify triggers (after verify, so it stays out of the prompt)
                 ev["_reactions"] = ctx.reactions.get(num)
                 ev["_band_decile"] = ctx.band_decile(num)
