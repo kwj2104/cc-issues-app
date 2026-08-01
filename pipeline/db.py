@@ -95,6 +95,27 @@ def connect() -> Iterator[psycopg.Connection]:
 # Generic batched upsert
 # ---------------------------------------------------------------------------
 
+def scrub_nul(value: Any) -> Any:
+    """Strip NUL (0x00) from text, recursing into lists (text[] columns).
+
+    Postgres text cannot hold 0x00 — psycopg raises DataError and takes the whole
+    transaction with it. The classifier is the realistic source: `claude -p` returns
+    JSON, and a "\\u0000" escape anywhere in it becomes a real NUL byte once parsed,
+    which is easy to hit when the model summarizes an issue about control characters
+    or encoding bugs. One poisoned string used to roll back an entire catchup run —
+    and because the queue is `order by retrieval_score desc`, the next run rebuilt the
+    identical chunk and died in the same place. See test_db.py.
+
+    Dropping the byte is the only option (it cannot be stored) and it is lossless in
+    practice: a NUL carries no meaning in a title, summary or rationale.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [scrub_nul(v) for v in value]
+    return value
+
+
 def upsert(
     conn: psycopg.Connection,
     table: str,
@@ -135,11 +156,21 @@ def upsert(
     sql = f"insert into {table} ({col_sql}) values {placeholders} {conflict_sql}"
 
     sent = 0
+    scrubbed = 0
     with conn.cursor() as cur:
         for start in range(0, len(rows), page_size):
             chunk = rows[start : start + page_size]
-            cur.executemany(sql, [tuple(r[c] for c in cols) for r in chunk])
+            params = []
+            for r in chunk:
+                vals = tuple(r[c] for c in cols)
+                clean = tuple(scrub_nul(v) for v in vals)
+                scrubbed += clean != vals
+                params.append(clean)
+            cur.executemany(sql, params)
             sent += len(chunk)
+    # Loud, not silent: a NUL means the classifier emitted one and we want to see it.
+    if scrubbed:
+        print(f"[db] stripped NUL bytes from {scrubbed} {table} row(s) before insert")
     return sent
 
 
